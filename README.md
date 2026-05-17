@@ -1,107 +1,231 @@
-# dynimage
+<div align="center">
 
-Dynamic GitHub stat images for README embeds. Live, theme-aware, animated SVG on Edge — raster PNG / WebP / AVIF on Node via Skia + Sharp. One URL per card; drop into an `<img>` tag in any README and it stays current.
+# 🎴 dynimage
 
-Once deployed, replace `BASE` below with your deployment URL (e.g. `https://dynimage.vercel.app`). The embeds in this README are live — GitHub renders SVG (including SMIL animation and CSS keyframes) through its `camo` proxy.
+**Live, theme-aware, animated GitHub stat cards for README embeds.**
 
-## Live cards (replace BASE after first deploy)
+One URL. Adapts to the viewer's reader. Animates inside `camo`. Works everywhere `<img>` works.
 
-### `commits` — Edge, animated SVG + Satori PNG
+<sub>Built on Next.js 16 · Edge SVG + Satori · Skia + Sharp on Node · Zero client JS</sub>
+
+</div>
+
+---
+
+## 🖼️ Live cards
+
+> [!NOTE]
+> These cards hit the live API at `dynimage.vercel.app`. The SVG variants animate inside GitHub's `camo` image proxy via SMIL + CSS keyframes — only `<script>` is stripped, animation is not.
+
+### `commits` — Edge runtime, animated SVG + Satori PNG
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://dynimage.vercel.app/api/moefingers/commits.svg?theme=dark">
+  <source media="(prefers-color-scheme: light)" srcset="https://dynimage.vercel.app/api/moefingers/commits.svg?theme=light">
+  <img alt="commits — theme-responsive" src="https://dynimage.vercel.app/api/moefingers/commits.svg">
+</picture>
 
 <p>
-  <img alt="commits.svg" src="https://dynimage.vercel.app/api/moefingers/commits.svg" />
+  <img alt="commits — ocean" src="https://dynimage.vercel.app/api/moefingers/commits.png?theme=ocean">
+  <img alt="commits — ember" src="https://dynimage.vercel.app/api/moefingers/commits.png?theme=ember">
+</p>
+
+### `streak` — real Gaussian blur via SVG `<filter>`, pulse rings via SMIL
+
+<p>
+  <img alt="streak — animated" src="https://dynimage.vercel.app/api/moefingers/streak.svg">
 </p>
 
 <p>
-  <img alt="commits.png (ocean)" src="https://dynimage.vercel.app/api/moefingers/commits.png?theme=ocean" />
+  <img alt="streak — forest" src="https://dynimage.vercel.app/api/moefingers/streak.png?theme=forest">
+  <img alt="streak — rose" src="https://dynimage.vercel.app/api/moefingers/streak.png?theme=rose">
 </p>
 
-### `streak` — Edge, real Gaussian blur via SVG `<filter>`, animated pulse rings
+### `portrait` — Skia compositing + Sharp AVIF transcode on Node
 
 <p>
-  <img alt="streak.svg" src="https://dynimage.vercel.app/api/moefingers/streak.svg" />
-</p>
-
-<p>
-  <img alt="streak.png (ember)" src="https://dynimage.vercel.app/api/moefingers/streak.png?theme=ember" />
-</p>
-
-### `portrait` — Node, full Skia compositing + Sharp AVIF transcode
-
-<p>
-  <img alt="portrait.png" src="https://dynimage.vercel.app/api/moefingers/portrait.png" />
+  <img alt="portrait" src="https://dynimage.vercel.app/api/moefingers/portrait.png">
 </p>
 
 <p>
-  <img alt="portrait.avif (forest)" src="https://dynimage.vercel.app/api/moefingers/portrait.avif?theme=forest" />
+  <img alt="portrait — ember avif" src="https://dynimage.vercel.app/api/moefingers/portrait.avif?theme=ember&w=900&h=400">
 </p>
 
-## URL shape
+---
+
+## 🎨 Theme gallery
+
+The same card, six themes. Override any color via query string with raw hex (no leading `#`).
+
+<p>
+  <img alt="dark" src="https://dynimage.vercel.app/api/moefingers/commits.svg?theme=dark">
+  <img alt="light" src="https://dynimage.vercel.app/api/moefingers/commits.svg?theme=light">
+  <img alt="ocean" src="https://dynimage.vercel.app/api/moefingers/commits.svg?theme=ocean">
+</p>
+<p>
+  <img alt="ember" src="https://dynimage.vercel.app/api/moefingers/commits.svg?theme=ember">
+  <img alt="forest" src="https://dynimage.vercel.app/api/moefingers/commits.svg?theme=forest">
+  <img alt="rose" src="https://dynimage.vercel.app/api/moefingers/commits.svg?theme=rose">
+</p>
+
+### One-off custom palette
+
+```md
+![](https://dynimage.vercel.app/api/moefingers/commits.svg?bg=0a0a0a&accent=fb923c&gradient=7c2d12)
+```
+
+<p>
+  <img alt="custom" src="https://dynimage.vercel.app/api/moefingers/commits.svg?bg=0a0a0a&accent=fb923c&gradient=7c2d12">
+</p>
+
+---
+
+## 🗺️ Architecture
+
+```mermaid
+flowchart LR
+  GH[GitHub README<br/>&lt;img src=...&gt;] --> CAMO[camo<br/>image proxy]
+  CAMO --> RW{next.config<br/>rewrites}
+  RW -->|edge cards| EDGE[/api/&lt;user&gt;/&lt;stat&gt;<br/>Edge runtime]
+  RW -->|node cards| NODE[/api/n/&lt;user&gt;/&lt;stat&gt;<br/>Node runtime]
+  EDGE --> DISP[dispatchCard]
+  NODE --> DISP
+  DISP --> REG{card registry}
+  REG -->|svg| TPL[template SVG<br/>SMIL + CSS]
+  REG -->|edge png| SATORI[next/og<br/>Satori → PNG]
+  REG -->|edge blur png| RESVG[resvg-wasm<br/>SVG filter → PNG]
+  REG -->|node png| SKIA[skia<br/>@napi-rs/canvas]
+  REG -->|node avif| SHARP[sharp<br/>transcode]
+  EDGE -.->|GraphQL| GQL[@octokit/graphql<br/>+ Next fetch cache]
+  NODE -.-> GQL
+  GQL -.-> GHAPI[GitHub API]
+```
+
+---
+
+## 🔧 URL shape
 
 ```
 /api/<user>/<card>.<format>?<query>
-
-card     commits | streak | portrait
-format   svg | png | webp | avif      (per card; not all support all)
-
-query
-  theme        dark | light | ocean | ember | forest | rose
-  bg           override theme bg            (hex, no leading #)
-  accent       override theme accent
-  text         override theme text color
-  text-muted   override theme muted text
-  gradient     override theme gradient stop
-  stroke       override theme border
-  w            override width    (1..4096)
-  h            override height   (1..4096)
 ```
 
-When no `theme` param is given, the SVG output is **responsive to `prefers-color-scheme`** via an in-SVG `<style>` block with `@media` rules. One URL adapts to the viewer's reader.
+| segment                                                    | values                                                          |
+| ---------------------------------------------------------- | --------------------------------------------------------------- |
+| `card`                                                     | `commits` · `streak` · `portrait`                               |
+| `format`                                                   | `svg` · `png` · `webp` · `avif` (per card; not all support all) |
+| `theme`                                                    | `dark` · `light` · `ocean` · `ember` · `forest` · `rose`        |
+| `bg`, `accent`, `text`, `text-muted`, `gradient`, `stroke` | hex without `#`, overrides theme                                |
+| `w`, `h`                                                   | 1..4096                                                         |
 
-## Stack
+Press <kbd>R</kbd> in your browser to bust the cache and see fresh data.
 
-- Next.js 16 App Router, TypeScript strict (`noUncheckedIndexedAccess`), pnpm
-- `@octokit/graphql` over Edge-compatible fetch with `next: { revalidate: 300 }` shared cache
-- `next/og` (Satori + Resvg) for Edge PNG rendering of designed cards
-- `@resvg/resvg-wasm` for Edge rasterization of hand-authored SVG with `<filter>` graph
-- `@napi-rs/canvas` (Skia) for Node imperative compositing
-- `sharp` for Node AVIF / WebP transcode
-- CSS Modules + custom-property tokens (no Tailwind)
+---
 
-## Architecture
+## ✨ The SVG superpowers
 
-- Each card is a module in [`src/lib/cards/`](src/lib/cards/) declaring its data fetcher, supported formats, and renderer per format
-- One Edge catch-all at [`/api/[user]/[stat]/route.tsx`](src/app/api/%5Buser%5D/%5Bstat%5D/route.tsx), one Node catch-all at [`/api/n/[user]/[stat]/route.tsx`](src/app/api/n/%5Buser%5D/%5Bstat%5D/route.tsx)
-- [`next.config.ts`](next.config.ts) rewrites the public URL to the Node catch-all for cards needing native graphics — clients only see `/api/<user>/<stat>`
-- ETag derived from a SHA-256 of the response body for cheap `304 Not Modified` on hot paths
-- Response headers: `Cache-Control: public, max-age=300, s-maxage=3600, stale-while-revalidate=86400`
+> [!TIP]
+> GitHub's `camo` proxy serves SVG faithfully — `<script>` is stripped, but **SMIL animation, `<style>` blocks, CSS `@keyframes`, `@media (prefers-color-scheme)`, and `<foreignObject>` all work**. dynimage uses all of them.
 
-## Local development
+dynimage's SVG output ships with:
+
+- **SMIL animation** — `<animateTransform>` sheen sweeps, `<animate>` count-up, pulse rings
+- **CSS keyframes** inside in-SVG `<style>` — entrance fades, transitions
+- **`prefers-color-scheme` media queries** when no `theme` param is given — one URL, both modes
+- **Real SVG `<filter>`** with `feGaussianBlur` — actual Gaussian blur, not faked
+
+---
+
+## 🚀 Deploy your own
+
+<details>
+<summary><strong>Click to expand setup</strong></summary>
 
 ```sh
+git clone https://github.com/moefingers/dynimage
+cd dynimage
 pnpm install
-cp .env.example .env.local           # add GITHUB_TOKEN
-pnpm dev
-# Browse http://localhost:3000
-```
+cp .env.example .env.local           # add your GITHUB_TOKEN
+pnpm dev                              # http://localhost:3000
 
-The `GITHUB_TOKEN` must be a fine-grained PAT with read-only access to public repository metadata.
-
-## Deploy
-
-```sh
+# Production
 vercel link
-vercel env add GITHUB_TOKEN production
-vercel env add GITHUB_TOKEN preview
-git push                              # auto-deploys
+vercel env add GITHUB_TOKEN production preview development
+vercel --prod
 ```
 
-After first deploy, update the `BASE` URL in the embeds above if your Vercel project name differs from `dynimage`.
+The `GITHUB_TOKEN` must be a fine-grained PAT with read-only public repo metadata access. Create one at [github.com/settings/tokens?type=beta](https://github.com/settings/tokens?type=beta).
 
-## Adding a card
+</details>
 
-1. Add `src/lib/cards/<name>.ts` exporting a `Card<TData>` — declare `runtime`, the data fetcher, and a renderer per format
-2. Register it in [`src/lib/cards/registry.ts`](src/lib/cards/registry.ts)
+> [!IMPORTANT]
+> The cards above will return `502` until `GITHUB_TOKEN` is set in the Vercel project envs and the project is redeployed.
+
+---
+
+## 🧱 Adding a card
+
+<details>
+<summary><strong>Three steps, no architectural decisions left to revisit</strong></summary>
+
+1. Create [`src/lib/cards/<name>.ts`](src/lib/cards/) exporting a `Card<TData>` — data fetcher, renderer per format, declared runtime
+2. Add it to [`src/lib/cards/registry-edge.ts`](src/lib/cards/registry-edge.ts) **or** [`registry-node.ts`](src/lib/cards/registry-node.ts) (pick the one matching your runtime) and to [`registry-meta.ts`](src/lib/cards/registry-meta.ts) for the homepage demo grid
 3. If `runtime: 'nodejs'`, add the new card name to the regex group in [`next.config.ts`](next.config.ts) rewrites
 
-That's the whole house: no architectural decisions are left to revisit per card.
+</details>
+
+---
+
+## 🧰 Stack
+
+| layer              | choice                                           | why                                                                 |
+| ------------------ | ------------------------------------------------ | ------------------------------------------------------------------- |
+| Framework          | Next.js 16 App Router                            | dual runtime per route, file-based catch-all, `next/og` built in    |
+| Type system        | TypeScript strict + `noUncheckedIndexedAccess`   | per zcanon canon                                                    |
+| Edge PNG           | `next/og` (Satori + Resvg)                       | Vercel-native, JSX-driven, no native deps                           |
+| Edge real-blur PNG | `@resvg/resvg-wasm`                              | hand-authored SVG with `<filter feGaussianBlur>` rasterized on Edge |
+| Node PNG           | `@napi-rs/canvas` (Skia)                         | full Canvas API, same engine as Chrome                              |
+| Node transcode     | `sharp`                                          | AVIF/WebP, best compression                                         |
+| GitHub data        | `@octokit/graphql` + `next: { revalidate: 300 }` | one round-trip per card, shared cache                               |
+| Package manager    | pnpm                                             | per zcanon canon                                                    |
+
+---
+
+## 📐 Math
+
+Why does the streak's blur look right at any DPR? Because SVG `<filter>` operates in user-space units, which the rasterizer scales:
+
+$$
+\sigma_{\text{px}} = \sigma_{\text{user}} \cdot \frac{w_{\text{px}}}{w_{\text{user}}}
+$$
+
+The blur kernel grows with the output resolution, so the _visual_ blur radius stays constant. No "looks fuzzy at 4x" artifacts.
+
+---
+
+## 🎬 What this README is also demonstrating
+
+<details>
+<summary><strong>Every GitHub-flavored-markdown trick used above</strong></summary>
+
+| Technique                                        | Where                                         |
+| ------------------------------------------------ | --------------------------------------------- |
+| `<picture>` with `<source media>`                | commits theme-responsive embed at top         |
+| Animated SVG embed                               | streak, commits                               |
+| `prefers-color-scheme` inside the SVG            | when no `theme=` param                        |
+| `> [!NOTE]` / `[!TIP]` / `[!IMPORTANT]` callouts | throughout                                    |
+| `<details>` / `<summary>` collapsibles           | setup, adding cards, this section             |
+| `<kbd>` keyboard chips                           | URL shape section                             |
+| `<div align="center">` heading                   | top of README                                 |
+| `<sub>` for sub-text                             | top of README                                 |
+| Mermaid diagram                                  | architecture section                          |
+| LaTeX math (`$$...$$`)                           | the "why blur scales correctly" section above |
+
+</details>
+
+---
+
+<div align="center">
+
+<sub>Repo: <a href="https://github.com/moefingers/dynimage">github.com/moefingers/dynimage</a> · API: <a href="https://dynimage.vercel.app">dynimage.vercel.app</a></sub>
+
+</div>
