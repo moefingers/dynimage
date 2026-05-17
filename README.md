@@ -54,15 +54,15 @@ Each card is labeled below with its **format**, the **runtime** that serves it, 
 
 <br><br>
 
-<img alt="streak.png?theme=forest" src="https://dynimage.vercel.app/api/moefingers/streak.png?theme=forest">
+<img alt="streak.png?theme=forest" src="https://dynimage.vercel.app/api/moefingers/streak.png?theme=forest&v=2">
 
-<sub>↑ <code>streak.png?theme=forest</code> · format=**png** · runtime=**node** · renderer=**sharp** (rasterizes the same SVG via librsvg) · 🖼️ **static** · ⚠ font glyphs show as <code>.notdef</code> boxes; see "Known limitations" below</sub>
+<sub>↑ <code>streak.png?theme=forest</code> · format=**png** · runtime=**node** · renderer=**sharp** (rasterizes the same SVG via librsvg) · 🖼️ **static** · text rendered via Noto Sans inlined as <code>@font-face</code> data URI; flame is an inline SVG <code>&lt;path&gt;</code> (Heroicons)</sub>
 
 <br><br>
 
-<img alt="streak.png?theme=rose" src="https://dynimage.vercel.app/api/moefingers/streak.png?theme=rose">
+<img alt="streak.png?theme=rose" src="https://dynimage.vercel.app/api/moefingers/streak.png?theme=rose&v=2">
 
-<sub>↑ <code>streak.png?theme=rose</code> · format=**png** · runtime=**node** · renderer=**sharp** · 🖼️ **static** · ⚠ same font issue</sub>
+<sub>↑ <code>streak.png?theme=rose</code> · format=**png** · runtime=**node** · renderer=**sharp** · 🖼️ **static**</sub>
 
 ---
 
@@ -80,11 +80,11 @@ Each card is labeled below with its **format**, the **runtime** that serves it, 
 
 ---
 
-### Known limitations
+### Font handling per renderer
 
-- **`streak.png` text + emoji render as `.notdef` boxes** on production. The SVG uses `font-family: ui-sans-serif, system-ui, sans-serif` — these are browser CSS keywords, not real font families that `librsvg` (via sharp) can resolve. The `streak.svg` variant works because the browser resolves them; the rasterized `.png` doesn't. Fix is to bundle a TTF font and inline as `@font-face` data URI; tracked.
-- **commits.png** uses Satori which has its own bundled default font, so no glyph issue there.
-- **portrait.png/.avif** use Skia which manages fonts via `@napi-rs/canvas`'s internal font registry.
+- **`commits.png`** (Satori) — bundles a default font internally, no project-side setup needed
+- **`streak.png`** (sharp via librsvg) — bundles `NotoSans-Regular.ttf` under [`src/lib/cards/fonts/`](src/lib/cards/fonts/) and inlines it as `@font-face` data URI in the SVG at render time; the 🔥 emoji was replaced with an inline SVG flame `<path>` so no emoji font is needed server-side
+- **`portrait.png/.webp/.avif`** (Skia via `@napi-rs/canvas`) — uses Skia's internal font registry; falls back gracefully to system fonts
 
 ---
 
