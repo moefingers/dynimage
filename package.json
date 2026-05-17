@@ -1,0 +1,48 @@
+{
+  "name": "dynimage",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "predev": "node scripts/copy-wasm.mjs",
+    "prebuild": "node scripts/copy-wasm.mjs",
+    "dev": "next dev",
+    "dev:lan": "next dev --hostname 0.0.0.0",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^0.1.83",
+    "@octokit/graphql": "^9.0.1",
+    "@resvg/resvg-wasm": "^2.6.2",
+    "next": "16.2.6",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "sharp": "^0.34.4"
+  },
+  "devDependencies": {
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.4",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.4.0",
+    "prettier": "^3.8.3",
+    "typescript": "^5"
+  },
+  "lint-staged": {
+    "*.{ts,tsx,js,mjs}": [
+      "prettier --write",
+      "eslint --fix"
+    ],
+    "*.{json,css,md}": "prettier --write"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": [
+      "@napi-rs/canvas",
+      "sharp"
+    ]
+  }
+}
