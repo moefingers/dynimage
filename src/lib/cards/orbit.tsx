@@ -361,7 +361,11 @@ const renderSvg: CardRenderer<Data> = async ({
 
   return {
     contentType: "image/svg+xml; charset=utf-8",
-    body: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(`Rotating 50-point sphere with icosahedron for ${username}`)}">${css}${rim}${sphereDots}${icosaEdges}${icosaVerts}<g class="u-label" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle"><text x="${cx}" y="${height - 24}" font-size="18" font-weight="700" fill="${pal.text}" letter-spacing="2">@${esc(username).toUpperCase()}</text><text x="${cx}" y="${height - 8}" font-size="9" fill="${pal.textAccent}" letter-spacing="3" opacity="0.85">D50 · ICOSA · ${variant.toUpperCase()}</text></g></svg>`,
+    // Paint order: rim glow underneath, then the icosahedron (which lives
+    // INSIDE the sphere shell), then the sphere dots on top so they read
+    // as passing in front of the icosa rather than getting occluded by
+    // it. Z-depth opacity on the dots still fades back-facing ones.
+    body: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(`Rotating 50-point sphere with icosahedron for ${username}`)}">${css}${rim}${icosaEdges}${icosaVerts}${sphereDots}<g class="u-label" font-family="ui-monospace, SFMono-Regular, Menlo, monospace" text-anchor="middle"><text x="${cx}" y="${height - 24}" font-size="18" font-weight="700" fill="${pal.text}" letter-spacing="2">@${esc(username).toUpperCase()}</text><text x="${cx}" y="${height - 8}" font-size="9" fill="${pal.textAccent}" letter-spacing="3" opacity="0.85">D50 · ICOSA · ${variant.toUpperCase()}</text></g></svg>`,
   };
 };
 

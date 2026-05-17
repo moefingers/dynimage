@@ -293,8 +293,8 @@ const renderSvg: CardRenderer<Data> = async ({
   <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#hSheen)">
     <animateTransform attributeName="transform" type="translate" from="${-width} 0" to="${width} 0" dur="4.8s" repeatCount="indefinite"/>
   </rect>
-  ${sphereDots}
   ${icosa}
+  ${sphereDots}
   <text class="hName" x="${panelX}" y="60">${esc(panelTitle)}</text>
   <text class="hSub"  x="${panelX}" y="84">${esc(panelSub)}</text>
   ${cellEls}
