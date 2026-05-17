@@ -3,8 +3,6 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "predev": "node scripts/copy-wasm.mjs",
-    "prebuild": "node scripts/copy-wasm.mjs",
     "dev": "next dev",
     "dev:lan": "next dev --hostname 0.0.0.0",
     "build": "next build",
@@ -15,7 +13,6 @@
   "dependencies": {
     "@napi-rs/canvas": "^0.1.83",
     "@octokit/graphql": "^9.0.1",
-    "@resvg/resvg-wasm": "^2.6.2",
     "next": "16.2.6",
     "react": "19.2.4",
     "react-dom": "19.2.4",

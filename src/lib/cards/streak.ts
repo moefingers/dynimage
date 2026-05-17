@@ -79,54 +79,33 @@ const renderSvg: CardRenderer<StreakData> = async ({
   body: streakSvg(data, theme, width, height, { animate: true }),
 });
 
+// PNG renderer runs on Node so we can use sharp to rasterize the
+// hand-authored SVG (preserving the real <filter feGaussianBlur>).
+// Vercel Edge's runtime-WASM-compile prohibition rules out
+// @resvg/resvg-wasm; Turbopack's wasm-as-ES-module bundling doesn't
+// give us a WebAssembly.Module either. Node + sharp sidesteps both.
 const renderPng: CardRenderer<StreakData> = async ({
   data,
   theme,
   width,
   height,
-  baseUrl,
 }) => {
-  // Lazy-load resvg-wasm; module init is heavy and we want it deferred
-  // out of the first-byte path of the .svg renderer.
-  const { initWasm, Resvg } = await import("@resvg/resvg-wasm");
-  await ensureResvgInitialized(initWasm, baseUrl);
+  const sharp = (await import("sharp")).default;
   const svg = streakSvg(data, theme, width, height, { animate: false });
-  const resvg = new Resvg(svg, {
-    fitTo: { mode: "width", value: width },
-    font: { loadSystemFonts: false },
-  });
-  const png = resvg.render().asPng();
-  return { body: png, contentType: "image/png" };
+  const png = await sharp(Buffer.from(svg), { density: 144 })
+    .resize(width, height, { fit: "fill" })
+    .png()
+    .toBuffer();
+  return { body: new Uint8Array(png), contentType: "image/png" };
 };
-
-let resvgInit: Promise<void> | null = null;
-async function ensureResvgInitialized(
-  initWasm: (
-    module: Promise<WebAssembly.Module> | WebAssembly.Module | Response,
-  ) => Promise<void>,
-  baseUrl: string,
-): Promise<void> {
-  if (!resvgInit) {
-    resvgInit = (async () => {
-      // The wasm is copied to public/wasm/resvg.wasm at build time by
-      // scripts/copy-wasm.mjs. Fetching from a stable URL works the
-      // same on Edge and Node and avoids bundler-specific module
-      // resolution quirks.
-      const res = await fetch(new URL("/wasm/resvg.wasm", baseUrl));
-      if (!res.ok) {
-        throw new Error(
-          `Failed to load resvg wasm from ${baseUrl}/wasm/resvg.wasm: ${res.status}`,
-        );
-      }
-      await initWasm(res);
-    })();
-  }
-  await resvgInit;
-}
 
 export const streakCard: Card<StreakData> = {
   name: "streak",
-  runtime: "edge",
+  // The SVG renderer is Edge-safe, but the PNG renderer needs sharp
+  // (Node-only). To keep the card single-runtime, we put the whole
+  // card on Node. The SVG response is still fast — just a few ms of
+  // Node cold-start on top of pure-template assembly.
+  runtime: "nodejs",
   fetch: (login) => fetchStreak(login),
   formats: {
     svg: renderSvg,

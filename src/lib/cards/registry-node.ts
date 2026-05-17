@@ -1,9 +1,11 @@
 import type { Card } from "./types";
+import { streakCard } from "./streak";
 import { portraitCard } from "./portrait";
 
 // Node runtime registry. Cards needing native graphics (Skia via
 // @napi-rs/canvas, Sharp). Imported by the Node catch-all route only.
 const NODE_CARDS = {
+  streak: streakCard,
   portrait: portraitCard,
 } as const;
 

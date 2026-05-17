@@ -10,9 +10,10 @@ const nextConfig: NextConfig = {
     return [
       // Cards rendered on Node (Skia, Sharp) live under /api/n/ internally.
       // Rewriting from the public /api/ path keeps the URL contract uniform
-      // regardless of which runtime renders the card.
+      // regardless of which runtime renders the card. Add new node cards
+      // to the regex group below.
       {
-        source: "/api/:user/:stat(portrait\\.(?:png|webp|avif))",
+        source: "/api/:user/:stat((?:streak|portrait)\\.(?:svg|png|webp|avif))",
         destination: "/api/n/:user/:stat",
       },
     ];

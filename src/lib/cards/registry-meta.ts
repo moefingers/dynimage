@@ -10,6 +10,6 @@ export const ALL_CARDS: ReadonlyArray<{
   formats: readonly CardFormat[];
 }> = [
   { name: "commits", runtime: "edge", formats: ["svg", "png"] },
-  { name: "streak", runtime: "edge", formats: ["svg", "png"] },
+  { name: "streak", runtime: "nodejs", formats: ["svg", "png"] },
   { name: "portrait", runtime: "nodejs", formats: ["png", "webp", "avif"] },
 ];

@@ -1,13 +1,11 @@
 import type { Card } from "./types";
 import { commitsCard } from "./commits";
-import { streakCard } from "./streak";
 
 // Edge runtime registry. Pulls in only cards whose dependencies are
-// Edge-compatible (web-fetch only, WASM allowed). Imported by the
-// Edge catch-all route exclusively.
+// Edge-compatible (web-fetch only). Imported by the Edge catch-all
+// route exclusively.
 const EDGE_CARDS = {
   commits: commitsCard,
-  streak: streakCard,
 } as const;
 
 export type EdgeCardName = keyof typeof EDGE_CARDS;
