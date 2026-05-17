@@ -1,6 +1,8 @@
 import type { AnyCard } from "./types";
 import { commitsCard } from "./commits";
 import { textCard } from "./text";
+import { metricCard } from "./metric";
+import { barCard } from "./bar";
 
 // Edge runtime registry. ONLY imports cards declared as
 // `runtime: "edge"`. The Edge bundle has size and dep restrictions
@@ -11,6 +13,8 @@ import { textCard } from "./text";
 const EDGE_CARDS = {
   commits: commitsCard,
   text: textCard,
+  metric: metricCard,
+  bar: barCard,
 } as const;
 
 export type EdgeCardName = keyof typeof EDGE_CARDS;

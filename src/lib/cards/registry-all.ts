@@ -3,11 +3,14 @@ import { commitsCard } from "./commits";
 import { streakCard } from "./streak";
 import { portraitCard } from "./portrait";
 import { textCard } from "./text";
+import { metricCard } from "./metric";
+import { barCard } from "./bar";
 
 // All-cards registry. Imports every card module — including the
 // Node-only ones (sharp, @napi-rs/canvas). Used by:
 //   - the Node catch-all route (for rendering Node cards)
 //   - the /api/meta introspection endpoint (for editor metadata)
+//   - compound rendering (any sub-card type is resolvable here)
 //
 // Never imported by Edge routes — those use registry-edge.ts.
 const ALL_CARDS = {
@@ -15,6 +18,8 @@ const ALL_CARDS = {
   streak: streakCard,
   portrait: portraitCard,
   text: textCard,
+  metric: metricCard,
+  bar: barCard,
 } as const;
 
 export type CardName = keyof typeof ALL_CARDS;
