@@ -1,29 +1,50 @@
+import { z } from "zod";
 import { ImageResponse } from "next/og";
 import type { Card, CardRenderer } from "./types";
-import { fetchCommits, type CommitsData } from "@/lib/octokit";
+import {
+  userOverview,
+  userContributions,
+  type UserOverview,
+  type UserContributions,
+} from "@/lib/data/atoms";
 import { esc, fmtInt } from "./svg-helpers";
 
 const DEFAULT_W = 480;
 const DEFAULT_H = 200;
+
+// Zod input schema — single source of truth for what URL params this
+// card accepts. The dispatcher validates input against this; the editor
+// introspects it to render a form; TS infers TInput from `z.infer<…>`.
+const Input = z.object({
+  user: z
+    .string()
+    .min(1)
+    .max(39)
+    .regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/),
+});
+type Input = z.infer<typeof Input>;
+
+type Data = {
+  overview: UserOverview;
+  contrib: UserContributions;
+};
 
 // ── SVG renderer ──────────────────────────────────────────────────────
 // Animated count-up (SMIL <animate> on text content), radial gradient
 // background, and per-prefers-color-scheme theming when the request
 // uses the default theme. Animations and CSS keep working under
 // GitHub's camo proxy — only <script> is stripped.
-const renderSvg: CardRenderer<CommitsData> = async ({
+const renderSvg: CardRenderer<Data> = async ({
   data,
   theme,
   width,
   height,
 }) => {
-  const total = data.totalCommitsLastYear;
+  const total = data.contrib.totalCommitsLastYear;
   const label = "commits in the last year";
-  const sub = `${data.name ?? data.login} • ${fmtInt(data.publicRepoCount)} public repos`;
+  const sub = `${data.overview.name ?? data.overview.login} • ${fmtInt(data.overview.publicRepoCount)} public repos`;
 
-  // SMIL count-up: animate the text content from 0 → total over 1.4s.
-  // We emit a single <text> with an <animate attributeName="textContent"
-  // values="0;...;N"> driving the number.
+  // SMIL count-up: animate text content from 0 → total over 1.4s.
   const steps = 14;
   const countValues = Array.from({ length: steps + 1 }, (_, i) =>
     fmtInt(Math.round((total * i) / steps)),
@@ -31,7 +52,7 @@ const renderSvg: CardRenderer<CommitsData> = async ({
 
   return {
     contentType: "image/svg+xml; charset=utf-8",
-    body: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(`${total} commits in the last year by ${data.login}`)}">
+    body: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(`${total} commits in the last year by ${data.overview.login}`)}">
   <defs>
     <radialGradient id="bg" cx="50%" cy="50%" r="70%">
       <stop offset="0%" stop-color="${theme.gradient}" stop-opacity="0.55"/>
@@ -67,22 +88,20 @@ const renderSvg: CardRenderer<CommitsData> = async ({
   </text>
   <text class="label" x="32" y="130" text-anchor="start">${esc(label)}</text>
   <text class="sub" x="32" y="${height - 22}" text-anchor="start">${esc(sub)}</text>
-  <text class="sub" x="${width - 22}" y="${height - 22}" text-anchor="end" opacity="0.6">@${esc(data.login)}</text>
+  <text class="sub" x="${width - 22}" y="${height - 22}" text-anchor="end" opacity="0.6">@${esc(data.overview.login)}</text>
 </svg>`,
   };
 };
 
 // ── Satori PNG renderer ──────────────────────────────────────────────
-// Uses next/og (Satori + Resvg). Renders the same conceptual card to a
-// flat PNG. No animation (raster) and no prefers-color-scheme (raster).
-const renderPng: CardRenderer<CommitsData> = async ({
+const renderPng: CardRenderer<Data> = async ({
   data,
   theme,
   width,
   height,
 }) => {
-  const total = data.totalCommitsLastYear;
-  const sub = `${data.name ?? data.login} • ${fmtInt(data.publicRepoCount)} public repos`;
+  const total = data.contrib.totalCommitsLastYear;
+  const sub = `${data.overview.name ?? data.overview.login} • ${fmtInt(data.overview.publicRepoCount)} public repos`;
   const img = new ImageResponse(
     <div
       style={{
@@ -123,7 +142,7 @@ const renderPng: CardRenderer<CommitsData> = async ({
         }}
       >
         <span>{sub}</span>
-        <span style={{ opacity: 0.6 }}>@{data.login}</span>
+        <span style={{ opacity: 0.6 }}>@{data.overview.login}</span>
       </div>
     </div>,
     { width, height },
@@ -132,13 +151,30 @@ const renderPng: CardRenderer<CommitsData> = async ({
   return { body: arr, contentType: "image/png" };
 };
 
-export const commitsCard: Card<CommitsData> = {
+export const commitsCard: Card<Input, Data> = {
   name: "commits",
   runtime: "edge",
-  fetch: (login) => fetchCommits(login),
+  defaultSize: { width: DEFAULT_W, height: DEFAULT_H },
+  input: Input,
+  resolve: async (input, cache) => {
+    // Two atoms — userOverview and userContributions — fetched in
+    // parallel. Sharing the cache means a compound card using both
+    // this card and another GitHub-user card dedupes the lookups.
+    const [overview, contrib] = await Promise.all([
+      userOverview({ login: input.user }, cache),
+      userContributions({ login: input.user }, cache),
+    ]);
+    return { overview, contrib };
+  },
   formats: {
     svg: renderSvg,
     png: renderPng,
   },
-  defaultSize: { width: DEFAULT_W, height: DEFAULT_H },
+  meta: {
+    title: "Commits in the last year",
+    description:
+      "Total commit contributions for a GitHub user over the trailing 12 months, with the user's public-repo count. Animated count-up + accent sheen sweep in SVG.",
+    dimensions: ["user"],
+    supportsAnimation: true,
+  },
 };

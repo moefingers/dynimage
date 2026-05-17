@@ -1,24 +1,33 @@
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 import type { Card, CardRenderer, Theme } from "./types";
-import { fetchStreak, type StreakData } from "@/lib/octokit";
+import { userContributions, type UserContributions } from "@/lib/data/atoms";
 import { esc, fmtInt } from "./svg-helpers";
 
 const DEFAULT_W = 520;
 const DEFAULT_H = 220;
+
+const Input = z.object({
+  user: z
+    .string()
+    .min(1)
+    .max(39)
+    .regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/),
+});
+type Input = z.infer<typeof Input>;
+
+type Data = UserContributions;
 
 // Lazily load the bundled font on first PNG request and cache the
 // base64-encoded data URI. Used to inline @font-face into the SVG so
 // sharp's librsvg has real glyphs to render; without this, server-side
 // rasterization renders text as .notdef boxes because Vercel's Node
 // runtime has no fonts installed and `ui-sans-serif`/`system-ui` are
-// CSS keywords that browser engines resolve, not real font families.
+// CSS keywords browsers resolve, not real font families.
 let fontDataUriCached: string | null = null;
 function fontDataUri(): string {
   if (fontDataUriCached) return fontDataUriCached;
-  // process.cwd() resolves to the Next project root on Vercel Node
-  // functions. The literal string lets Vercel's file tracer include
-  // the TTF in the function bundle automatically.
   const buf = readFileSync(
     path.join(process.cwd(), "src/lib/cards/fonts/NotoSans-Regular.ttf"),
   );
@@ -33,11 +42,8 @@ function fontDataUri(): string {
 const FLAME_PATH =
   "M12.963 2.286a.75.75 0 00-1.071-.136 9.742 9.742 0 00-3.539 6.176 7.547 7.547 0 01-1.705-1.715.75.75 0 00-1.152.082A9 9 0 1015.68 4.534a7.46 7.46 0 01-2.717-2.248zM15.75 14.25a3.75 3.75 0 11-7.313-1.172c.628.465 1.35.81 2.133 1a5.99 5.99 0 011.925-3.547 3.75 3.75 0 013.255 3.719z";
 
-// `embedFont` controls whether we inline the font @font-face in the SVG.
-// `true` for the PNG path (sharp needs the glyphs); `false` for the SVG
-// path (browser uses the viewer's OS fonts — keeping the response small).
 function streakSvg(
-  data: StreakData,
+  data: Data,
   theme: Theme,
   width: number,
   height: number,
@@ -50,7 +56,6 @@ function streakSvg(
   const cx2 = width - 140;
   const cy2 = height / 2;
 
-  // Flame: scale 24×24 viewBox → 56px, center on (flameX, cy1+4).
   const flameSize = 56;
   const flameScale = flameSize / 24;
   const flameTx = flameX - flameSize / 2;
@@ -68,10 +73,6 @@ function streakSvg(
     </circle>`
     : "";
 
-  // Browser path uses `ui-sans-serif, system-ui, sans-serif` so the
-  // SVG inherits whatever font the viewer's OS provides (Apple Sans,
-  // Segoe UI, Liberation Sans, etc). The rasterizer path embeds Noto
-  // Sans so librsvg always finds a glyph.
   const fontFamily = opts.embedFont
     ? `"Noto Sans", sans-serif`
     : `ui-sans-serif, system-ui, sans-serif`;
@@ -121,7 +122,7 @@ function streakSvg(
 </svg>`;
 }
 
-const renderSvg: CardRenderer<StreakData> = async ({
+const renderSvg: CardRenderer<Data> = async ({
   data,
   theme,
   width,
@@ -134,12 +135,7 @@ const renderSvg: CardRenderer<StreakData> = async ({
   }),
 });
 
-// PNG renderer runs on Node so we can use sharp to rasterize the
-// hand-authored SVG (preserving the real <filter feGaussianBlur>).
-// Vercel Edge's runtime-WASM-compile prohibition rules out
-// @resvg/resvg-wasm; Turbopack's wasm-as-ES-module bundling doesn't
-// give us a WebAssembly.Module either. Node + sharp sidesteps both.
-const renderPng: CardRenderer<StreakData> = async ({
+const renderPng: CardRenderer<Data> = async ({
   data,
   theme,
   width,
@@ -157,17 +153,21 @@ const renderPng: CardRenderer<StreakData> = async ({
   return { body: new Uint8Array(png), contentType: "image/png" };
 };
 
-export const streakCard: Card<StreakData> = {
+export const streakCard: Card<Input, Data> = {
   name: "streak",
-  // The SVG renderer is Edge-safe, but the PNG renderer needs sharp
-  // (Node-only). To keep the card single-runtime, we put the whole
-  // card on Node. The SVG response is still fast — just a few ms of
-  // Node cold-start on top of pure-template assembly.
   runtime: "nodejs",
-  fetch: (login) => fetchStreak(login),
+  defaultSize: { width: DEFAULT_W, height: DEFAULT_H },
+  input: Input,
+  resolve: (input, cache) => userContributions({ login: input.user }, cache),
   formats: {
     svg: renderSvg,
     png: renderPng,
   },
-  defaultSize: { width: DEFAULT_W, height: DEFAULT_H },
+  meta: {
+    title: "Contribution streak",
+    description:
+      "Current and longest consecutive contribution streaks for a GitHub user (last 12 months). SVG variant animates with SMIL pulse rings and real Gaussian blur via SVG <filter>; PNG variant rasterized by sharp.",
+    dimensions: ["user"],
+    supportsAnimation: true,
+  },
 };

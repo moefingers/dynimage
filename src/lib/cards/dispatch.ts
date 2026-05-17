@@ -1,19 +1,30 @@
-import type { Card, CardFormat } from "./types";
+import type { AnyCard, CardFormat } from "./types";
 import { resolveTheme } from "./theme";
 import { etagOf } from "./etag";
+import { DedupeCache } from "@/lib/data/cache";
 
 const STAT_RE = /^([a-z][a-z0-9-]*)\.(svg|png|webp|avif)$/i;
 
 export type DispatchInput = {
-  user: string;
   statSegment: string;
   searchParams: URLSearchParams;
+  pathParams: Record<string, string>;
   runtime: "edge" | "nodejs";
   ifNoneMatch: string | null;
   baseUrl: string;
-  getCard: (name: string) => Card<unknown> | null;
+  getCard: (name: string) => AnyCard | null;
 };
 
+// Dispatch a request to the right card. The flow is:
+//   1. Parse <stat>.<ext> into (cardName, format)
+//   2. Look up the card; refuse if wrong runtime (loud failure, not silent)
+//   3. Build the card's input object from pathParams + searchParams
+//   4. Validate via the card's Zod schema (rejection here = clear 400)
+//   5. Resolve data via the card's resolver (one DedupeCache per request)
+//   6. Render via the card's renderer for the requested format
+//   7. Hash → ETag → 304 if If-None-Match matches; else 200 with the body
+//
+// All validation is at the boundary; downstream code sees typed data.
 export async function dispatchCard(input: DispatchInput): Promise<Response> {
   const match = STAT_RE.exec(input.statSegment);
   if (!match) {
@@ -31,8 +42,8 @@ export async function dispatchCard(input: DispatchInput): Promise<Response> {
   }
 
   if (card.runtime !== input.runtime) {
-    // Reachable if next.config rewrites are out of sync with the registry.
-    // Loud failure beats silent misroute.
+    // Reachable if next.config rewrites are out of sync with the
+    // registry. Loud failure beats silent misroute.
     return new Response(
       `Card "${cardName}" requires the ${card.runtime} runtime; got ${input.runtime}. ` +
         "Check next.config.ts rewrites.",
@@ -49,21 +60,44 @@ export async function dispatchCard(input: DispatchInput): Promise<Response> {
     );
   }
 
-  const sp = input.searchParams;
-  const width =
-    parseIntOr(sp.get("w"), card.defaultSize.width) ?? card.defaultSize.width;
-  const height =
-    parseIntOr(sp.get("h"), card.defaultSize.height) ?? card.defaultSize.height;
-  const theme = resolveTheme(sp);
+  // Build the card's input object from URL path + query params. The
+  // card's Zod schema picks the fields it needs and rejects anything
+  // that fails validation. Query-string-only "cross-cutting" params
+  // (theme, w, h, color overrides) are NOT in the card input — they're
+  // resolved separately so all cards share consistent presentation.
+  const inputObj: Record<string, string> = { ...input.pathParams };
+  for (const [k, v] of input.searchParams.entries()) {
+    // First write wins so explicit path params can't be overridden by
+    // sneaky query strings. (Defense in depth — path params arrive
+    // first anyway, but this makes the precedence explicit.)
+    if (!(k in inputObj)) inputObj[k] = v;
+  }
 
+  const parsed = card.input.safeParse(inputObj);
+  if (!parsed.success) {
+    return new Response(
+      `Invalid input for "${cardName}": ${parsed.error.message}`,
+      { status: 400 },
+    );
+  }
+
+  const cache = new DedupeCache();
   let data: unknown;
   try {
-    data = await card.fetch(input.user, { searchParams: sp });
+    data = await card.resolve(parsed.data, cache);
   } catch (e) {
     return new Response(`Upstream fetch failed: ${errMessage(e)}`, {
       status: 502,
     });
   }
+
+  const width =
+    parseIntOr(input.searchParams.get("w"), card.defaultSize.width) ??
+    card.defaultSize.width;
+  const height =
+    parseIntOr(input.searchParams.get("h"), card.defaultSize.height) ??
+    card.defaultSize.height;
+  const theme = resolveTheme(input.searchParams);
 
   let rendered;
   try {
@@ -93,8 +127,7 @@ export async function dispatchCard(input: DispatchInput): Promise<Response> {
   const body =
     typeof rendered.body === "string"
       ? rendered.body
-      : // Coerce Uint8Array to BodyInit; Response accepts it via BufferSource.
-        (rendered.body as BodyInit);
+      : (rendered.body as BodyInit);
 
   return new Response(body, {
     headers: {

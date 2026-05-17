@@ -1,6 +1,25 @@
-import { ALL_CARDS } from "@/lib/cards/registry-meta";
+import { allCards } from "@/lib/cards/registry-all";
 
 const DEMO_USER = "moefingers";
+
+// Sample inputs per card-type for the home page demo grid. Cards
+// requiring more than a user (repo, topic, etc.) would specify them
+// here; the current set all take just a user, with `text` taking a
+// literal string.
+const DEMO_QUERIES: Record<string, Record<string, string>> = {
+  commits: {},
+  streak: {},
+  portrait: {},
+  text: { text: "hello, dynimage" },
+};
+
+function demoUrlFor(name: string, format: string): string {
+  if (name === "text") {
+    const params = new URLSearchParams(DEMO_QUERIES.text);
+    return `/api/text/text.${format}?${params}`;
+  }
+  return `/api/${DEMO_USER}/${name}.${format}`;
+}
 
 export default function Home() {
   return (
@@ -14,11 +33,11 @@ export default function Home() {
 
       <h2>Cards</h2>
       <div className="card-grid">
-        {ALL_CARDS.flatMap((c) =>
-          c.formats.map((fmt) => (
+        {allCards().flatMap((c) =>
+          Object.keys(c.formats).map((fmt) => (
             <figure key={`${c.name}.${fmt}`}>
               <img
-                src={`/api/${DEMO_USER}/${c.name}.${fmt}`}
+                src={demoUrlFor(c.name, fmt)}
                 alt={`${c.name} (${fmt})`}
                 loading="lazy"
               />
@@ -26,7 +45,7 @@ export default function Home() {
                 <code>
                   /api/&lt;user&gt;/{c.name}.{fmt}
                 </code>{" "}
-                — {c.runtime}
+                — {c.runtime} — {c.meta.title}
               </figcaption>
             </figure>
           )),
@@ -37,11 +56,14 @@ export default function Home() {
       <pre>
         <code>{`/api/<user>/<card>.<format>?<query>
 
-card     commits | streak | portrait
+card     commits | streak | portrait | text
 format   svg | png | webp | avif      (per card; not all support all)
 query    theme=dark|light|ocean|ember|forest|rose
          bg, accent, text, text-muted, gradient, stroke   (hex without #)
-         w, h                                              (override size)`}</code>
+         w, h                                              (override size)
+
+For the full machine-readable card catalog (used by the editor):
+GET /api/meta`}</code>
       </pre>
 
       <h2>Examples</h2>
@@ -49,7 +71,8 @@ query    theme=dark|light|ocean|ember|forest|rose
         <code>{`/api/${DEMO_USER}/commits.svg
 /api/${DEMO_USER}/commits.png?theme=ocean
 /api/${DEMO_USER}/streak.svg?accent=fb923c
-/api/${DEMO_USER}/portrait.avif?theme=ember&w=900&h=400`}</code>
+/api/${DEMO_USER}/portrait.avif?theme=ember&w=900&h=400
+/api/anything/text.svg?text=hello&size=48`}</code>
       </pre>
 
       <h2>SVG ↔ raster</h2>

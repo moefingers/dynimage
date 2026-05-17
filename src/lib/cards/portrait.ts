@@ -1,14 +1,34 @@
+import { z } from "zod";
 import type { Card, CardRenderer, Theme } from "./types";
-import { fetchPortrait, type PortraitData } from "@/lib/octokit";
+import {
+  userOverview,
+  userTopLanguages,
+  type UserOverview,
+  type UserTopLanguages,
+} from "@/lib/data/atoms";
 
 const DEFAULT_W = 720;
 const DEFAULT_H = 320;
+
+const Input = z.object({
+  user: z
+    .string()
+    .min(1)
+    .max(39)
+    .regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/),
+});
+type Input = z.infer<typeof Input>;
+
+type Data = {
+  overview: UserOverview;
+  languages: UserTopLanguages;
+};
 
 // Skia-rendered portrait card. Uses @napi-rs/canvas (Node-only).
 // Demonstrates the full canvas API: gradient backgrounds, shadow blur,
 // arc compositions, image compositing (avatar), language pill row.
 async function renderSkia(
-  data: PortraitData,
+  data: Data,
   theme: Theme,
   width: number,
   height: number,
@@ -42,7 +62,7 @@ async function renderSkia(
   const avatarX = 56;
   const avatarY = (height - avatarSize) / 2;
   try {
-    const avatar = await loadImage(data.avatarUrl);
+    const avatar = await loadImage(data.overview.avatarUrl);
     ctx.save();
     ctx.beginPath();
     ctx.arc(
@@ -87,7 +107,7 @@ async function renderSkia(
 
   // Text column.
   const textX = avatarX + avatarSize + 32;
-  const displayName = data.name ?? data.login;
+  const displayName = data.overview.name ?? data.overview.login;
   ctx.fillStyle = theme.text;
   ctx.font = "700 32px ui-sans-serif, system-ui, sans-serif";
   ctx.textBaseline = "top";
@@ -95,12 +115,20 @@ async function renderSkia(
 
   ctx.fillStyle = theme.textMuted;
   ctx.font = "500 16px ui-sans-serif, system-ui, sans-serif";
-  ctx.fillText(`@${data.login}`, textX, avatarY + 40);
+  ctx.fillText(`@${data.overview.login}`, textX, avatarY + 40);
 
-  if (data.bio) {
+  if (data.overview.bio) {
     ctx.fillStyle = theme.textMuted;
     ctx.font = "400 14px ui-sans-serif, system-ui, sans-serif";
-    wrapText(ctx, data.bio, textX, avatarY + 72, width - textX - 32, 18, 2);
+    wrapText(
+      ctx,
+      data.overview.bio,
+      textX,
+      avatarY + 72,
+      width - textX - 32,
+      18,
+      2,
+    );
   }
 
   // Stats row.
@@ -109,7 +137,7 @@ async function renderSkia(
     ctx,
     textX,
     statsY,
-    String(data.publicRepoCount),
+    String(data.overview.publicRepoCount),
     "repos",
     theme.accent,
     theme.textMuted,
@@ -118,7 +146,7 @@ async function renderSkia(
     ctx,
     textX + 110,
     statsY,
-    String(data.followers),
+    String(data.overview.followers),
     "followers",
     theme.accent,
     theme.textMuted,
@@ -127,18 +155,18 @@ async function renderSkia(
     ctx,
     textX + 240,
     statsY,
-    String(data.following),
+    String(data.overview.following),
     "following",
     theme.accent,
     theme.textMuted,
   );
 
   // Language pills along the bottom.
-  if (data.topLanguages.length > 0) {
+  if (data.languages.length > 0) {
     const pillY = height - 38;
     let pillX = textX;
     ctx.font = "500 12px ui-sans-serif, system-ui, sans-serif";
-    for (const lang of data.topLanguages.slice(0, 5)) {
+    for (const lang of data.languages.slice(0, 5)) {
       const label = lang.name;
       const metrics = ctx.measureText(label);
       const pillW = metrics.width + 28;
@@ -167,7 +195,7 @@ async function renderSkia(
 }
 
 function roundRect(
-  ctx: CanvasRenderingContext2D | import("@napi-rs/canvas").SKRSContext2D,
+  ctx: import("@napi-rs/canvas").SKRSContext2D,
   x: number,
   y: number,
   w: number,
@@ -223,7 +251,6 @@ function wrapText(
       line = word;
       lines += 1;
       if (lines === maxLines - 1) {
-        // Last allowed line: greedy-fill with ellipsis if needed.
         let last = line;
         for (const w of words.slice(words.indexOf(word) + 1)) {
           const t = `${last} ${w}`;
@@ -253,7 +280,6 @@ function truncate(s: string, max: number): string {
 }
 
 function withAlpha(hexOrName: string, alpha: number): string {
-  // Accepts #rrggbb only; pass through anything else.
   if (/^#[0-9a-fA-F]{6}$/.test(hexOrName)) {
     const r = parseInt(hexOrName.slice(1, 3), 16);
     const g = parseInt(hexOrName.slice(3, 5), 16);
@@ -263,7 +289,7 @@ function withAlpha(hexOrName: string, alpha: number): string {
   return hexOrName;
 }
 
-const renderPng: CardRenderer<PortraitData> = async ({
+const renderPng: CardRenderer<Data> = async ({
   data,
   theme,
   width,
@@ -273,7 +299,7 @@ const renderPng: CardRenderer<PortraitData> = async ({
   return { body: new Uint8Array(png), contentType: "image/png" };
 };
 
-const renderWebp: CardRenderer<PortraitData> = async ({
+const renderWebp: CardRenderer<Data> = async ({
   data,
   theme,
   width,
@@ -285,7 +311,7 @@ const renderWebp: CardRenderer<PortraitData> = async ({
   return { body: new Uint8Array(webp), contentType: "image/webp" };
 };
 
-const renderAvif: CardRenderer<PortraitData> = async ({
+const renderAvif: CardRenderer<Data> = async ({
   data,
   theme,
   width,
@@ -297,14 +323,28 @@ const renderAvif: CardRenderer<PortraitData> = async ({
   return { body: new Uint8Array(avif), contentType: "image/avif" };
 };
 
-export const portraitCard: Card<PortraitData> = {
+export const portraitCard: Card<Input, Data> = {
   name: "portrait",
   runtime: "nodejs",
-  fetch: (login) => fetchPortrait(login),
+  defaultSize: { width: DEFAULT_W, height: DEFAULT_H },
+  input: Input,
+  resolve: async (input, cache) => {
+    const [overview, languages] = await Promise.all([
+      userOverview({ login: input.user }, cache),
+      userTopLanguages({ login: input.user }, cache),
+    ]);
+    return { overview, languages };
+  },
   formats: {
     png: renderPng,
     webp: renderWebp,
     avif: renderAvif,
   },
-  defaultSize: { width: DEFAULT_W, height: DEFAULT_H },
+  meta: {
+    title: "Profile portrait",
+    description:
+      "User card with avatar, bio, repo/follower/following counts, and top languages. Rendered via Skia (@napi-rs/canvas); transcoded to WebP/AVIF via sharp for smaller payloads.",
+    dimensions: ["user"],
+    supportsAnimation: false,
+  },
 };

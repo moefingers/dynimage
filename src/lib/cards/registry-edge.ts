@@ -1,21 +1,27 @@
-import type { Card } from "./types";
+import type { AnyCard } from "./types";
 import { commitsCard } from "./commits";
+import { textCard } from "./text";
 
-// Edge runtime registry. Pulls in only cards whose dependencies are
-// Edge-compatible (web-fetch only). Imported by the Edge catch-all
-// route exclusively.
+// Edge runtime registry. ONLY imports cards declared as
+// `runtime: "edge"`. The Edge bundle has size and dep restrictions
+// (no native modules), so it must never transitively pull a Node-only
+// card module like `streak` (sharp) or `portrait` (@napi-rs/canvas).
+//
+// Adding a new Edge card: create the module, add one line here.
 const EDGE_CARDS = {
   commits: commitsCard,
+  text: textCard,
 } as const;
 
 export type EdgeCardName = keyof typeof EDGE_CARDS;
 
-export function getEdgeCard(name: string): Card<unknown> | null {
+export function getEdgeCard(name: string): AnyCard | null {
   if (name in EDGE_CARDS) {
-    // Variance erasure: each Card<TData> is invariant in TData, but at
-    // runtime dispatch always pairs a fetcher and renderer with matching
-    // data, so the cast is sound.
-    return EDGE_CARDS[name as EdgeCardName] as unknown as Card<unknown>;
+    // The cast is sound: each card declares its own TInput/TData, and
+    // the dispatcher pairs Zod-validated input with the same card's
+    // resolver and renderer. TS can't express this through invariant
+    // generics without HKT, so we erase to AnyCard at the boundary.
+    return EDGE_CARDS[name as EdgeCardName] as unknown as AnyCard;
   }
   return null;
 }

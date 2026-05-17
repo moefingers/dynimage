@@ -1,9 +1,10 @@
 import { dispatchCard } from "@/lib/cards/dispatch";
-import { getNodeCard } from "@/lib/cards/registry-node";
+import { getCard } from "@/lib/cards/registry-all";
 
-// Node runtime: handles cards needing native graphics (Skia, Sharp).
-// Reached via next.config.ts rewrites — clients use /api/<user>/<stat>
-// and the rewrite layer sends node-only cards here.
+// Node runtime: handles cards needing native graphics (Skia, sharp,
+// font reads via fs). Reached via next.config.ts rewrites — clients
+// use /api/<user>/<stat> and the rewrite layer sends node-only cards
+// here.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -14,12 +15,12 @@ export async function GET(
   const { user, stat } = await ctx.params;
   const url = new URL(request.url);
   return dispatchCard({
-    user,
     statSegment: stat,
     searchParams: url.searchParams,
+    pathParams: { user },
     runtime: "nodejs",
     ifNoneMatch: request.headers.get("if-none-match"),
     baseUrl: `${url.protocol}//${url.host}`,
-    getCard: getNodeCard,
+    getCard: getCard,
   });
 }
