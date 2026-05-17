@@ -119,21 +119,21 @@ The same card, six themes. Override any color via query string with raw hex (no 
 
 ```mermaid
 flowchart LR
-  GH[GitHub README<br/>&lt;img src=...&gt;] --> CAMO[camo<br/>image proxy]
-  CAMO --> RW{next.config<br/>rewrites}
-  RW -->|edge cards| EDGE[/api/&lt;user&gt;/&lt;stat&gt;<br/>Edge runtime]
-  RW -->|node cards| NODE[/api/n/&lt;user&gt;/&lt;stat&gt;<br/>Node runtime]
-  EDGE --> DISP[dispatchCard]
+  GH["GitHub README<br/>&lt;img src=...&gt;"] --> CAMO["camo<br/>image proxy"]
+  CAMO --> RW{"next.config<br/>rewrites"}
+  RW -->|"commits.*"| EDGE["api/&lt;user&gt;/&lt;stat&gt;<br/>Edge runtime"]
+  RW -->|"streak.* + portrait.*"| NODE["api/n/&lt;user&gt;/&lt;stat&gt;<br/>Node runtime"]
+  EDGE --> DISP["dispatchCard"]
   NODE --> DISP
-  DISP --> REG{card registry}
-  REG -->|svg| TPL[template SVG<br/>SMIL + CSS]
-  REG -->|edge png| SATORI[next/og<br/>Satori → PNG]
-  REG -->|edge blur png| RESVG[resvg-wasm<br/>SVG filter → PNG]
-  REG -->|node png| SKIA[skia<br/>@napi-rs/canvas]
-  REG -->|node avif| SHARP[sharp<br/>transcode]
-  EDGE -.->|GraphQL| GQL[@octokit/graphql<br/>+ Next fetch cache]
+  DISP --> REG{"card registry"}
+  REG -->|"commits.svg + streak.svg"| TPL["template SVG<br/>SMIL + CSS"]
+  REG -->|"commits.png"| SATORI["next/og<br/>Satori → PNG"]
+  REG -->|"streak.png"| RSHARP["sharp<br/>rasterize SVG + blur filter"]
+  REG -->|"portrait.png"| SKIA["@napi-rs/canvas<br/>(Skia)"]
+  REG -->|"portrait.webp + .avif"| SKIASHARP["Skia → sharp<br/>transcode"]
+  EDGE -.->|"GraphQL"| GQL["@octokit/graphql<br/>+ Next fetch cache"]
   NODE -.-> GQL
-  GQL -.-> GHAPI[GitHub API]
+  GQL -.-> GHAPI["GitHub API"]
 ```
 
 ---
