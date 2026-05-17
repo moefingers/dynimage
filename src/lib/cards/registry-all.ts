@@ -5,6 +5,13 @@ import { portraitCard } from "./portrait";
 import { textCard } from "./text";
 import { metricCard } from "./metric";
 import { barCard } from "./bar";
+import { orbitCard } from "./orbit";
+import { typingCard } from "./typing";
+import { syndicateCard } from "./syndicate";
+import { heroCard } from "./hero";
+import { stripCard } from "./strip";
+import { prismCard } from "./prism";
+import { nucleusCard } from "./nucleus";
 
 // All-cards registry. Imports every card module — including the
 // Node-only ones (sharp, @napi-rs/canvas). Used by:
@@ -20,6 +27,13 @@ const ALL_CARDS = {
   text: textCard,
   metric: metricCard,
   bar: barCard,
+  orbit: orbitCard,
+  typing: typingCard,
+  syndicate: syndicateCard,
+  hero: heroCard,
+  strip: stripCard,
+  prism: prismCard,
+  nucleus: nucleusCard,
 } as const;
 
 export type CardName = keyof typeof ALL_CARDS;

@@ -3,6 +3,13 @@ import { commitsCard } from "./commits";
 import { textCard } from "./text";
 import { metricCard } from "./metric";
 import { barCard } from "./bar";
+import { orbitCard } from "./orbit";
+import { typingCard } from "./typing";
+import { syndicateCard } from "./syndicate";
+import { heroCard } from "./hero";
+import { stripCard } from "./strip";
+import { prismCard } from "./prism";
+import { nucleusCard } from "./nucleus";
 
 // Edge runtime registry. ONLY imports cards declared as
 // `runtime: "edge"`. The Edge bundle has size and dep restrictions
@@ -15,6 +22,13 @@ const EDGE_CARDS = {
   text: textCard,
   metric: metricCard,
   bar: barCard,
+  orbit: orbitCard,
+  typing: typingCard,
+  syndicate: syndicateCard,
+  hero: heroCard,
+  strip: stripCard,
+  prism: prismCard,
+  nucleus: nucleusCard,
 } as const;
 
 export type EdgeCardName = keyof typeof EDGE_CARDS;
