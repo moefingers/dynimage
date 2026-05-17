@@ -46,6 +46,95 @@ Returns every card type, its declared runtime, supported formats, and a Zod-deri
 
 ---
 
+## 🆕 Phase 2: compound rendering + `/api/render`
+
+Multiple cards composed into one image via a single base64-encoded layout spec. The URL is fully cacheable by camo — same as a regular card embed, just bigger.
+
+<img alt="compound — ocean dashboard, 5 cards" src="https://dynimage.vercel.app/api/render?format=png&spec=eyJ2IjoxLCJ3Ijo4MDAsImgiOjMyMCwidGhlbWUiOiJvY2VhbiIsImNhcmRzIjpbeyJ0eXBlIjoidGV4dCIsImlucHV0Ijp7InRleHQiOiJtb2VmaW5nZXJzIiwic2l6ZSI6MzYsImFsaWduIjoibGVmdCJ9LCJ4IjoxNiwieSI6MTYsInciOjI4MCwiaCI6NjB9LHsidHlwZSI6Im1ldHJpYyIsImlucHV0Ijp7ImxhYmVsIjoiQ29tbWl0cyBsYXN0IHllYXIiLCJ2YWx1ZSI6IjEyNDcifSwieCI6MzIwLCJ5IjoxNiwidyI6MjIwLCJoIjoxNDB9LHsidHlwZSI6Im1ldHJpYyIsImlucHV0Ijp7ImxhYmVsIjoiQWN0aXZlIHN0cmVhayIsInZhbHVlIjoiNDIiLCJ1bml0IjoiZGF5cyJ9LCJ4Ijo1NjAsInkiOjE2LCJ3IjoyMjAsImgiOjE0MH0seyJ0eXBlIjoiYmFyIiwiaW5wdXQiOnsibGFiZWwiOiJBdXRob3JlZCIsInZhbHVlIjo0NywibWF4Ijo2MH0sIngiOjE2LCJ5IjoxODAsInciOjM4MCwiaCI6ODB9LHsidHlwZSI6ImJhciIsImlucHV0Ijp7ImxhYmVsIjoiVGVzdCBjb3ZlcmFnZSIsInZhbHVlIjo3OCwibWF4IjoxMDB9LCJ4Ijo0MTAsInkiOjE4MCwidyI6MzgwLCJoIjo4MH1dfQ">
+
+<sub>↑ <code>/api/render?format=png&spec=&lt;base64-of-LayoutSpec&gt;</code> · 5 sub-cards (1 text + 2 metric + 2 bar) composed by sharp · 800×320 · ocean theme · URL is 797 chars total</sub>
+
+### The decoded spec
+
+```json
+{
+  "v": 1,
+  "w": 800,
+  "h": 320,
+  "theme": "ocean",
+  "cards": [
+    {
+      "type": "text",
+      "input": { "text": "moefingers", "size": 36, "align": "left" },
+      "x": 16,
+      "y": 16,
+      "w": 280,
+      "h": 60
+    },
+    {
+      "type": "metric",
+      "input": { "label": "Commits last year", "value": "1247" },
+      "x": 320,
+      "y": 16,
+      "w": 220,
+      "h": 140
+    },
+    {
+      "type": "metric",
+      "input": { "label": "Active streak", "value": "42", "unit": "days" },
+      "x": 560,
+      "y": 16,
+      "w": 220,
+      "h": 140
+    },
+    {
+      "type": "bar",
+      "input": { "label": "Authored", "value": 47, "max": 60 },
+      "x": 16,
+      "y": 180,
+      "w": 380,
+      "h": 80
+    },
+    {
+      "type": "bar",
+      "input": { "label": "Test coverage", "value": 78, "max": 100 },
+      "x": 410,
+      "y": 180,
+      "w": 380,
+      "h": 80
+    }
+  ]
+}
+```
+
+### Two ways to call it
+
+**GET** — for `<img src="…">` embeds. URL contains the entire spec; camo caches like any image:
+
+```
+GET /api/render?format=png&spec=<base64-of-LayoutSpec>
+GET /api/render?format=svg&spec=<base64>     # vector + animation preserved
+GET /api/render?format=avif&spec=<base64>    # smallest payload
+GET /api/render?format=png&spec=<base64>&z=1 # set z=1 if spec is gzipped before base64
+```
+
+**POST** — for server-to-server callers (sync scripts, build tools). JSON body, image bytes back:
+
+```sh
+curl -X POST 'https://dynimage.vercel.app/api/render?format=png' \
+  -H 'content-type: application/json' \
+  -d @spec.json \
+  --output header.png
+```
+
+### What this unlocks
+
+- **Editor UI** (Phase 3) — generates spec URLs from a visual canvas
+- **Programmatic render-and-freeze** — callers like a museum sync script can POST a spec, save the resulting bytes into their repo, ship static images that always render (no runtime dependency on dynimage being up)
+- **External-fetch cards** (Phase 4) — same spec format, new card types that fetch arbitrary user-supplied URLs and extract values via JSONPath
+
+---
+
 ## 🖼️ Live cards
 
 > [!NOTE]
