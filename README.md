@@ -12,6 +12,40 @@ One URL. Adapts to the viewer's reader. Animates inside `camo`. Works everywhere
 
 ---
 
+## 🆕 Phase 1: bottom-up refactor
+
+The card system was rebuilt from the data layer up for long-term extensibility — typed atoms, Zod-schema-driven cards, a `/api/meta` introspection endpoint, and a new fetch-less `text` card primitive proving the architecture handles non-GitHub data sources cleanly. Existing cards (commits, streak, portrait) below render through the new pipeline at unchanged URLs.
+
+### New: `text` card
+
+<img alt="text — title" src="https://dynimage.vercel.app/api/_/text.svg?text=composable%20by%20design&size=44&theme=ocean&w=520&h=100">
+
+<sub>↑ <code>/api/\_/text.svg?text=composable%20by%20design&size=44&theme=ocean&w=520&h=100</code> · format=**svg** · runtime=**edge** · renderer=**browser** · 🎬 **none** · zero upstream fetch — the input IS the data</sub>
+
+<br><br>
+
+<img alt="text — bold ember" src="https://dynimage.vercel.app/api/_/text.png?text=hello%20from%20Phase%201&size=32&theme=ember&w=400&h=80">
+
+<sub>↑ <code>/api/\_/text.png?text=hello%20from%20Phase%201&size=32&theme=ember&w=400&h=80</code> · format=**png** · runtime=**edge** · renderer=**Satori** · 🖼️ **static**</sub>
+
+<br><br>
+
+<img alt="text — left rose" src="https://dynimage.vercel.app/api/_/text.svg?text=%E2%9C%A6%20left-aligned%20in%20rose&size=28&align=left&theme=rose&w=480&h=80">
+
+<sub>↑ <code>text=%E2%9C%A6%20left-aligned%20in%20rose&align=left</code> · format=**svg** · runtime=**edge** · the placeholder <code>\_</code> in the path is ignored — text cards have no user dimension</sub>
+
+### Machine-readable card catalog
+
+The future editor reads this; you can too:
+
+```sh
+curl https://dynimage.vercel.app/api/meta | jq '.cards[] | {name, runtime, formats, dimensions: .meta.dimensions}'
+```
+
+Returns every card type, its declared runtime, supported formats, and a Zod-derived JSON Schema for its input — the editor will use this to render per-card forms without hardcoding any card name.
+
+---
+
 ## 🖼️ Live cards
 
 > [!NOTE]
