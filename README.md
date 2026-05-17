@@ -17,39 +17,74 @@ One URL. Adapts to the viewer's reader. Animates inside `camo`. Works everywhere
 > [!NOTE]
 > These cards hit the live API at `dynimage.vercel.app`. The SVG variants animate inside GitHub's `camo` image proxy via SMIL + CSS keyframes — only `<script>` is stripped, animation is not.
 
-### `commits` — Edge runtime, animated SVG + Satori PNG
+Each card is labeled below with its **format**, the **runtime** that serves it, and the **renderer** that produces the pixels. When debugging a broken card, the label tells you exactly which path you're looking at.
+
+> [!NOTE]
+> SVG outputs ship raw markup that **your browser** renders — fonts, emoji, SMIL animation, and `prefers-color-scheme` media queries all use the viewer's OS capabilities. Raster outputs (PNG/WebP/AVIF) are pre-rendered on the **server** by Satori, sharp, or Skia, and ship as flat pixels — server-side font availability matters.
+
+### `commits` — Edge runtime
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="https://dynimage.vercel.app/api/moefingers/commits.svg?theme=dark">
   <source media="(prefers-color-scheme: light)" srcset="https://dynimage.vercel.app/api/moefingers/commits.svg?theme=light">
-  <img alt="commits — theme-responsive" src="https://dynimage.vercel.app/api/moefingers/commits.svg">
+  <img alt="commits.svg" src="https://dynimage.vercel.app/api/moefingers/commits.svg">
 </picture>
 
-<p>
-  <img alt="commits — ocean" src="https://dynimage.vercel.app/api/moefingers/commits.png?theme=ocean">
-  <img alt="commits — ember" src="https://dynimage.vercel.app/api/moefingers/commits.png?theme=ember">
-</p>
+<sub>↑ <code>commits.svg</code> · format=**svg** · runtime=**edge** · renderer=**browser** (raw SVG passthrough) · 🎬 **animated** (SMIL count-up + CSS keyframes + sheen sweep) · `<picture>` swaps by `prefers-color-scheme`</sub>
 
-### `streak` — real Gaussian blur via SVG `<filter>`, pulse rings via SMIL
+<br><br>
 
-<p>
-  <img alt="streak — animated" src="https://dynimage.vercel.app/api/moefingers/streak.svg">
-</p>
+<img alt="commits.png?theme=ocean" src="https://dynimage.vercel.app/api/moefingers/commits.png?theme=ocean">
 
-<p>
-  <img alt="streak — forest" src="https://dynimage.vercel.app/api/moefingers/streak.png?theme=forest">
-  <img alt="streak — rose" src="https://dynimage.vercel.app/api/moefingers/streak.png?theme=rose">
-</p>
+<sub>↑ <code>commits.png?theme=ocean</code> · format=**png** · runtime=**edge** · renderer=**Satori** (`next/og`, JSX → SVG → PNG via WASM) · 🖼️ **static** (raster — no animation possible)</sub>
 
-### `portrait` — Skia compositing + Sharp AVIF transcode on Node
+<br><br>
 
-<p>
-  <img alt="portrait" src="https://dynimage.vercel.app/api/moefingers/portrait.png">
-</p>
+<img alt="commits.png?theme=ember" src="https://dynimage.vercel.app/api/moefingers/commits.png?theme=ember">
 
-<p>
-  <img alt="portrait — ember avif" src="https://dynimage.vercel.app/api/moefingers/portrait.avif?theme=ember&w=900&h=400">
-</p>
+<sub>↑ <code>commits.png?theme=ember</code> · format=**png** · runtime=**edge** · renderer=**Satori** · 🖼️ **static**</sub>
+
+---
+
+### `streak` — Node runtime
+
+<img alt="streak.svg" src="https://dynimage.vercel.app/api/moefingers/streak.svg">
+
+<sub>↑ <code>streak.svg</code> · format=**svg** · runtime=**node** · renderer=**browser** (raw SVG passthrough) · 🎬 **animated** (SMIL pulse rings, real Gaussian blur via SVG <code>&lt;filter&gt;</code>, CSS keyframe entrance)</sub>
+
+<br><br>
+
+<img alt="streak.png?theme=forest" src="https://dynimage.vercel.app/api/moefingers/streak.png?theme=forest">
+
+<sub>↑ <code>streak.png?theme=forest</code> · format=**png** · runtime=**node** · renderer=**sharp** (rasterizes the same SVG via librsvg) · 🖼️ **static** · ⚠ font glyphs show as <code>.notdef</code> boxes; see "Known limitations" below</sub>
+
+<br><br>
+
+<img alt="streak.png?theme=rose" src="https://dynimage.vercel.app/api/moefingers/streak.png?theme=rose">
+
+<sub>↑ <code>streak.png?theme=rose</code> · format=**png** · runtime=**node** · renderer=**sharp** · 🖼️ **static** · ⚠ same font issue</sub>
+
+---
+
+### `portrait` — Node runtime
+
+<img alt="portrait.png" src="https://dynimage.vercel.app/api/moefingers/portrait.png">
+
+<sub>↑ <code>portrait.png</code> · format=**png** · runtime=**node** · renderer=**Skia** (<code>@napi-rs/canvas</code>, imperative Canvas API with avatar compositing) · 🖼️ **static**</sub>
+
+<br><br>
+
+<img alt="portrait.avif?theme=ember" src="https://dynimage.vercel.app/api/moefingers/portrait.avif?theme=ember&w=900&h=400">
+
+<sub>↑ <code>portrait.avif?theme=ember&w=900&h=400</code> · format=**avif** · runtime=**node** · renderer=**Skia → sharp** (Skia renders, sharp transcodes to AVIF) · 🖼️ **static**</sub>
+
+---
+
+### Known limitations
+
+- **`streak.png` text + emoji render as `.notdef` boxes** on production. The SVG uses `font-family: ui-sans-serif, system-ui, sans-serif` — these are browser CSS keywords, not real font families that `librsvg` (via sharp) can resolve. The `streak.svg` variant works because the browser resolves them; the rasterized `.png` doesn't. Fix is to bundle a TTF font and inline as `@font-face` data URI; tracked.
+- **commits.png** uses Satori which has its own bundled default font, so no glyph issue there.
+- **portrait.png/.avif** use Skia which manages fonts via `@napi-rs/canvas`'s internal font registry.
 
 ---
 
