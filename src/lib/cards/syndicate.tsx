@@ -133,6 +133,15 @@ const renderSvg: CardRenderer<Data> = async ({
       .tSub  { font: 500 13px ui-sans-serif, system-ui, sans-serif; fill: ${theme.textMuted}; }
       .lattice-hue { animation: latHue 22s linear infinite; transform-origin: center; }
       @keyframes latHue { 0% { filter: hue-rotate(0deg); } 100% { filter: hue-rotate(360deg); } }
+      /* Counter-phased breathing — at any moment one layer is contracted
+         while the other is expanded, so the lattice always has visible
+         content. transform-origin lives in the native 0-300 lattice
+         coords (after the outer translate/scale wrap). */
+      .lat-a, .lat-b { transform-origin: 150px 150px; transform-box: view-box; }
+      .lat-a { animation: latPulseA 14s ease-in-out infinite; }
+      .lat-b { animation: latPulseB 14s ease-in-out infinite; }
+      @keyframes latPulseA { 0% { transform: scale(1); } 50% { transform: scale(0); } 100% { transform: scale(1); } }
+      @keyframes latPulseB { 0% { transform: scale(0); } 50% { transform: scale(1); } 100% { transform: scale(0); } }
       .brand { opacity: 0; animation: fadeUp 700ms cubic-bezier(.2,.7,.2,1) 140ms both; }
       .tag   { opacity: 0; animation: fadeUp 700ms cubic-bezier(.2,.7,.2,1) 240ms both; }
       ${tileDelays}
@@ -147,13 +156,17 @@ const renderSvg: CardRenderer<Data> = async ({
        give the slow counter-spin you see on infinite-syndicate.com. -->
   <g class="lattice-hue" mask="url(#sLatticeMask)" opacity="0.85">
     <g transform="${latticeTx}">
-      <g transform-origin="150 150">
-        <path d="${SYNDICATE_LATTICE_PATH_A}" fill="none" stroke="url(#sLatticeGrad)" stroke-width="1.4" stroke-linejoin="round"/>
-        <animateTransform attributeName="transform" type="rotate" from="0 150 150" to="360 150 150" dur="120s" repeatCount="indefinite"/>
+      <g class="lat-a">
+        <g transform-origin="150 150">
+          <path d="${SYNDICATE_LATTICE_PATH_A}" fill="none" stroke="url(#sLatticeGrad)" stroke-width="1.4" stroke-linejoin="round"/>
+          <animateTransform attributeName="transform" type="rotate" from="0 150 150" to="360 150 150" dur="120s" repeatCount="indefinite"/>
+        </g>
       </g>
-      <g transform-origin="150 150">
-        <path d="${SYNDICATE_LATTICE_PATH_B}" fill="none" stroke="url(#sLatticeGradB)" stroke-width="1.4" stroke-linejoin="round"/>
-        <animateTransform attributeName="transform" type="rotate" from="360 150 150" to="0 150 150" dur="160s" repeatCount="indefinite"/>
+      <g class="lat-b">
+        <g transform-origin="150 150">
+          <path d="${SYNDICATE_LATTICE_PATH_B}" fill="none" stroke="url(#sLatticeGradB)" stroke-width="1.4" stroke-linejoin="round"/>
+          <animateTransform attributeName="transform" type="rotate" from="360 150 150" to="0 150 150" dur="160s" repeatCount="indefinite"/>
+        </g>
       </g>
     </g>
   </g>

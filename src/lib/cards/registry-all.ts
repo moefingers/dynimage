@@ -12,6 +12,8 @@ import { heroCard } from "./hero";
 import { stripCard } from "./strip";
 import { prismCard } from "./prism";
 import { nucleusCard } from "./nucleus";
+import { commitsOrbitCard } from "./commits-orbit";
+import { typingOrbitCard } from "./typing-orbit";
 
 // All-cards registry. Imports every card module — including the
 // Node-only ones (sharp, @napi-rs/canvas). Used by:
@@ -34,6 +36,8 @@ const ALL_CARDS = {
   strip: stripCard,
   prism: prismCard,
   nucleus: nucleusCard,
+  "commits-orbit": commitsOrbitCard,
+  "typing-orbit": typingOrbitCard,
 } as const;
 
 export type CardName = keyof typeof ALL_CARDS;
