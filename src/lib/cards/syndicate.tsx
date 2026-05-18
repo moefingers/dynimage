@@ -78,13 +78,29 @@ const renderSvg: CardRenderer<Data> = async ({
   // around that center.
   const latticeOuterTx = `translate(${latticeCx} ${latticeCy}) scale(${scale.toFixed(4)})`;
 
+  // Per-tile clipPath so each tile's shimmer can sweep an inner rect
+  // across the tile without bleeding outside its rounded corners.
+  const tileClips = TILES.map((_, i) => {
+    const x = PAD + i * (tileW + 14);
+    return `<clipPath id="tileClip-${i}"><rect x="${x}" y="${tilesY}" width="${tileW}" height="${tilesH}" rx="14" ry="14"/></clipPath>`;
+  }).join("");
+
+  // Stagger each tile's shimmer so they don't all fire in unison —
+  // total loop is 5.4s split evenly across the three tiles.
+  const SHIMMER_DUR = 5.4;
   const tileEls = TILES.map((t, i) => {
     const x = PAD + i * (tileW + 14);
     const isFocus = data.focus !== "all" && data.focus === t.key;
     const dim = data.focus !== "all" && !isFocus;
     const cardOpacity = dim ? 0.4 : 1;
+    const beginOffset = (-i * (SHIMMER_DUR / TILES.length)).toFixed(2);
     return `<g class="tile t${i}" style="opacity:${cardOpacity}">
       <rect x="${x}" y="${tilesY}" width="${tileW}" height="${tilesH}" rx="14" ry="14" fill="${theme.bg}" fill-opacity="0.72" stroke="${isFocus ? SYNDICATE_TEAL : theme.stroke}" stroke-width="${isFocus ? 2 : 1}"/>
+      <g clip-path="url(#tileClip-${i})">
+        <rect x="${x}" y="${tilesY}" width="${tileW}" height="${tilesH}" rx="14" ry="14" fill="url(#tileShimmerGrad)">
+          <animateTransform attributeName="transform" type="translate" from="${-tileW} 0" to="${tileW} 0" dur="${SHIMMER_DUR}s" begin="${beginOffset}s" repeatCount="indefinite"/>
+        </rect>
+      </g>
       <text x="${x + tileW / 2}" y="${tilesY + tilesH / 2 - 4}" text-anchor="middle" class="tTitle">${esc(t.title)}</text>
       <text x="${x + tileW / 2}" y="${tilesY + tilesH / 2 + 22}" text-anchor="middle" class="tSub">${esc(t.sub)}</text>
     </g>`;
@@ -99,11 +115,6 @@ const renderSvg: CardRenderer<Data> = async ({
     contentType: "image/svg+xml; charset=utf-8",
     body: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(`Infinite Syndicate — services CTA for ${data.user}`)}">
   <defs>
-    <radialGradient id="sBgWhole" cx="50%" cy="50%" r="80%">
-      <stop offset="0%" stop-color="${theme.gradient}" stop-opacity="0.55"/>
-      <stop offset="60%" stop-color="${theme.bg}" stop-opacity="1"/>
-      <stop offset="100%" stop-color="${theme.bg}" stop-opacity="1"/>
-    </radialGradient>
     <radialGradient id="sLatticeGrad" cx="50%" cy="50%" r="50%">
       <stop offset="16%" stop-color="${SYNDICATE_TEAL}" stop-opacity="0"/>
       <stop offset="35%" stop-color="${SYNDICATE_TEAL}" stop-opacity="0.55"/>
@@ -114,11 +125,15 @@ const renderSvg: CardRenderer<Data> = async ({
       <stop offset="35%" stop-color="#6f6f6f" stop-opacity="0.45"/>
       <stop offset="100%" stop-color="#808080" stop-opacity="0.85"/>
     </radialGradient>
-    <linearGradient id="sSheen" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="${SYNDICATE_TEAL}" stop-opacity="0"/>
-      <stop offset="50%" stop-color="${SYNDICATE_TEAL}" stop-opacity="0.22"/>
+    <!-- Per-tile shimmer gradient — narrow teal band, transparent at the
+         edges. Each tile's inner sweep rect uses this same gradient
+         shifted in time so the three tiles shimmer out of phase. -->
+    <linearGradient id="tileShimmerGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"  stop-color="${SYNDICATE_TEAL}" stop-opacity="0"/>
+      <stop offset="50%" stop-color="${SYNDICATE_TEAL}" stop-opacity="0.32"/>
       <stop offset="100%" stop-color="${SYNDICATE_TEAL}" stop-opacity="0"/>
     </linearGradient>
+    ${tileClips}
     <!-- Mask so the lattice fades to nothing behind the title to keep
          the brand name fully legible. Inverted-radial from the title
          midpoint outward. -->
@@ -150,7 +165,7 @@ const renderSvg: CardRenderer<Data> = async ({
     </style>
   </defs>
 
-  <rect width="${width}" height="${height}" rx="20" ry="20" fill="url(#sBgWhole)" stroke="${theme.stroke}" stroke-width="1"/>
+  <rect width="${width}" height="${height}" rx="20" ry="20" fill="${theme.bg}" stroke="${theme.stroke}" stroke-width="1"/>
 
   <!-- Brand lattice. Two layers — A spins one way, B (already offset
        ~15° in the source) spins the other. Each layer also breathes
@@ -193,11 +208,6 @@ const renderSvg: CardRenderer<Data> = async ({
       </g>
     </g>
   </g>
-
-  <!-- Brand teal sheen sweep on top of the lattice for a subtle pulse. -->
-  <rect width="${width}" height="${height}" rx="20" ry="20" fill="url(#sSheen)">
-    <animateTransform attributeName="transform" type="translate" from="${-width} 0" to="${width} 0" dur="6.8s" repeatCount="indefinite"/>
-  </rect>
 
   <text class="tag"   x="${width / 2}" y="42" text-anchor="middle">A SUITE OF SERVICES · BROUGHT TOGETHER</text>
   <text class="brand" x="${width / 2}" y="92" text-anchor="middle">Infinite Syndicate</text>
