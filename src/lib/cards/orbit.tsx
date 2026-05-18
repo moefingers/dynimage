@@ -29,9 +29,9 @@ const Input = z.object({
     .min(1)
     .max(39)
     .regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/),
-  // Visual variant. "basic" is the default sphere+icosa preset; other
-  // values tweak the look without changing the data shape.
-  v: z.enum(["basic", "neon", "mono", "prism"]).optional().default("basic"),
+  // Visual variant. Only "prism" and "neon" are supported — the other
+  // two palettes (basic, mono) were culled after presentation review.
+  v: z.enum(["prism", "neon"]).optional().default("prism"),
 });
 type Input = z.infer<typeof Input>;
 
@@ -241,22 +241,14 @@ type Palette = {
 // The transparent background means BOTH modes have to read — pale
 // near-white on light = invisible, so the icosa wireframe and text
 // labels both adapt.
-function styleBlock(variant: Input["v"], themeAccent: string): string {
+function styleBlock(variant: Input["v"]): string {
   const blocks: Record<
     NonNullable<Input["v"]>,
     { dark: string; light: string }
   > = {
-    basic: {
-      dark: `--orb-icosa-edge:#e4e4e7;--orb-icosa-vert:#fafafa;--orb-text:#f1f5f9;`,
-      light: `--orb-icosa-edge:#3f3f46;--orb-icosa-vert:#18181b;--orb-text:#18181b;`,
-    },
     neon: {
       dark: `--orb-icosa-edge:#22d3ee;--orb-icosa-vert:#f472b6;--orb-text:#f5f3ff;`,
       light: `--orb-icosa-edge:#0e7490;--orb-icosa-vert:#be185d;--orb-text:#1e1b4b;`,
-    },
-    mono: {
-      dark: `--orb-icosa-edge:${themeAccent};--orb-icosa-vert:${themeAccent};--orb-text:#e5e7eb;`,
-      light: `--orb-icosa-edge:${themeAccent};--orb-icosa-vert:${themeAccent};--orb-text:#18181b;`,
     },
     prism: {
       dark: `--orb-icosa-edge:#fbbf24;--orb-icosa-vert:#fde047;--orb-text:#fafafa;`,
@@ -270,6 +262,9 @@ function styleBlock(variant: Input["v"], themeAccent: string): string {
 function palette(variant: Input["v"], themeAccent: string): Palette {
   // The sphere-point hue function stays per-variant (saturated colors
   // read on both light and dark). Only edges/verts/text need CSS vars.
+  // themeAccent is retained as a parameter for future variants even
+  // though prism/neon don't currently consume it.
+  void themeAccent;
   const common: Pick<Palette, "icosaEdge" | "icosaVert" | "text"> = {
     icosaEdge: "var(--orb-icosa-edge)",
     icosaVert: "var(--orb-icosa-vert)",
@@ -286,13 +281,8 @@ function palette(variant: Input["v"], themeAccent: string): Palette {
         textAccent: "#06b6d4",
         rimGlow: "#a855f7",
       };
-    case "mono":
-      return {
-        ...common,
-        spherePoint: () => themeAccent,
-        textAccent: themeAccent,
-      };
     case "prism":
+    default:
       return {
         ...common,
         spherePoint: (lat) => {
@@ -300,16 +290,6 @@ function palette(variant: Input["v"], themeAccent: string): Palette {
           return `hsl(${hue.toFixed(0)}, 85%, 55%)`;
         },
         textAccent: "#d97706",
-      };
-    case "basic":
-    default:
-      return {
-        ...common,
-        spherePoint: (lat) => {
-          const hue = (lat / Math.PI + 0.5) * 360;
-          return `hsl(${hue.toFixed(0)}, 78%, 55%)`;
-        },
-        textAccent: themeAccent,
       };
   }
 }
@@ -320,7 +300,7 @@ const renderSvg: CardRenderer<Data> = async ({
   width,
   height,
 }) => {
-  const variant = (data as Data & { v: Input["v"] }).v ?? "basic";
+  const variant = (data as Data & { v: Input["v"] }).v ?? "prism";
   const pal = palette(variant, theme.accent);
 
   const cx = width / 2;
@@ -350,14 +330,11 @@ const renderSvg: CardRenderer<Data> = async ({
 
   const username = data.user;
 
-  // Hue-cycle the username text on the prism/neon variants — pure CSS
-  // keyframes on `filter`, smooth loop.
-  const hueAnimStyle =
-    variant === "prism" || variant === "neon"
-      ? `.u-label{animation:hue-cycle 8s linear infinite;}@keyframes hue-cycle{0%{filter:hue-rotate(0deg);}100%{filter:hue-rotate(360deg);}}`
-      : "";
+  // Hue-cycle the username text on a slow loop — pure CSS keyframes on
+  // `filter`, applied uniformly to both remaining variants.
+  const hueAnimStyle = `.u-label{animation:hue-cycle 8s linear infinite;}@keyframes hue-cycle{0%{filter:hue-rotate(0deg);}100%{filter:hue-rotate(360deg);}}`;
 
-  const css = `<style>${styleBlock(variant, theme.accent)}${hueAnimStyle}</style>`;
+  const css = `<style>${styleBlock(variant)}${hueAnimStyle}</style>`;
 
   return {
     contentType: "image/svg+xml; charset=utf-8",
