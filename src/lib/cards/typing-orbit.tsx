@@ -225,14 +225,15 @@ const renderSvg: CardRenderer<Data> = async ({
       <stop offset="0%" stop-color="${theme.gradient}" stop-opacity="0.55"/>
       <stop offset="90%" stop-color="${theme.bg}" stop-opacity="1"/>
     </radialGradient>
-    <!-- Rim glow keyed to the sphere position on the right side of the
-         banner — amber-warm to match the prism palette + the icosa
-         stroke. Stacks under the side-anchored toBg radial above. -->
-    <radialGradient id="toRim" cx="${sphereCx}" cy="${sphereCy}" r="${SPHERE_R + 30}" gradientUnits="userSpaceOnUse">
-      <stop offset="0%"  stop-color="#fbbf24" stop-opacity="0.30"/>
-      <stop offset="55%" stop-color="#fb923c" stop-opacity="0.16"/>
-      <stop offset="90%" stop-color="#fb923c" stop-opacity="0.05"/>
-      <stop offset="100%" stop-color="${theme.bg}" stop-opacity="0"/>
+    <!-- Hollow-center rim glow — annulus around the sphere, transparent
+         at the middle so the rotating dots/icosa shine through. Same
+         shape the standalone orbit?v=neon uses for its halo, recolored
+         amber-warm to match the prism palette. Applied via a <circle>
+         below so the gradient lives in the circle's own bounding box. -->
+    <radialGradient id="toRim" cx="50%" cy="50%" r="50%">
+      <stop offset="55%" stop-color="#fb923c" stop-opacity="0"/>
+      <stop offset="80%" stop-color="#fb923c" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#fb923c" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="toSheen" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#fbbf24" stop-opacity="0"/>
@@ -264,7 +265,7 @@ const renderSvg: CardRenderer<Data> = async ({
     </style>
   </defs>
   <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#toBg)" stroke="${theme.stroke}" stroke-width="1"/>
-  <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#toRim)"/>
+  <circle cx="${sphereCx}" cy="${sphereCy}" r="${SPHERE_R + 26}" fill="url(#toRim)"/>
   <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#toSheen)">
     <animateTransform attributeName="transform" type="translate" from="${-width} 0" to="${width} 0" dur="5.4s" repeatCount="indefinite"/>
   </rect>
