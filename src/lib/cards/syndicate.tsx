@@ -134,13 +134,16 @@ const renderSvg: CardRenderer<Data> = async ({
       <stop offset="100%" stop-color="${SYNDICATE_TEAL}" stop-opacity="0"/>
     </linearGradient>
     ${tileClips}
-    <!-- Mask so the lattice fades to nothing behind the title to keep
-         the brand name fully legible. Inverted-radial from the title
-         midpoint outward. -->
+    <!-- Mask softens the lattice behind the title for legibility — but
+         lightly enough that the flowers still show through. White =
+         lattice visible, lower alpha = lattice dimmer. The inner
+         stops used to drop to alpha=0 (lattice fully hidden, hard
+         "shadow"); now they hold at ~0.55 so the geometry peeks
+         through and the title still reads clearly. -->
     <radialGradient id="sLatticeMaskGrad" cx="50%" cy="34%" r="55%">
-      <stop offset="0%" stop-color="#000" stop-opacity="0"/>
-      <stop offset="35%" stop-color="#000" stop-opacity="0"/>
-      <stop offset="55%" stop-color="#fff" stop-opacity="1"/>
+      <stop offset="0%" stop-color="#fff" stop-opacity="0.5"/>
+      <stop offset="35%" stop-color="#fff" stop-opacity="0.6"/>
+      <stop offset="55%" stop-color="#fff" stop-opacity="0.92"/>
       <stop offset="100%" stop-color="#fff" stop-opacity="1"/>
     </radialGradient>
     <mask id="sLatticeMask" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}">
