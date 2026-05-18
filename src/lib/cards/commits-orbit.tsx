@@ -15,13 +15,15 @@ import {
   buildKeyTimes,
 } from "./sphere-math";
 import { esc, fmtInt } from "./svg-helpers";
+import { brandIconAt, GITHUB_PATH, GITHUB_VB } from "./brand-icons";
 
 const DEFAULT_W = 1100;
 const DEFAULT_H = 340;
 
-// commits-orbit: prism-variant rotating sphere on the LEFT, a huge
-// last-year-commits headline on the RIGHT. Companion to typing-orbit
-// (which mirrors the layout for the nitrotype card).
+// commits-orbit: neon-variant rotating sphere on the LEFT (cyan icosa
+// over a magenta-to-cyan dot band with the GitHub octocat at center),
+// a huge last-year-commits headline on the RIGHT. Companion to
+// typing-orbit (which uses the prism palette and the Nitrotype mark).
 
 const Input = z.object({
   user: z
@@ -49,9 +51,9 @@ function buildSphereDots(cx: number, cy: number, dur: string): string {
   const points = fibonacciSphere(N_POINTS);
   const keyTimes = buildKeyTimes(N_KF);
 
-  // Prism palette: wide hue spread across latitude — matches orbit?v=prism.
+  // Neon palette: magenta-to-cyan band keyed to latitude — matches orbit?v=neon.
   const hueFor = (lat: number) =>
-    `hsl(${(((lat + Math.PI / 2) / Math.PI) * 360).toFixed(0)}, 85%, 60%)`;
+    `hsl(${(((lat + Math.PI / 2) / Math.PI) * 80 + 270).toFixed(0)}, 95%, 60%)`;
 
   const initial = points.map((p) => {
     const x0 = SPHERE_R * Math.cos(p.lat) * Math.sin(p.lon);
@@ -127,8 +129,8 @@ function buildIcosa(
   }
 
   const out: string[] = [];
-  // Prism palette icosa stroke (matches orbit?v=prism).
-  const stroke = "#fbbf24";
+  // Neon palette icosa stroke (matches orbit?v=neon).
+  const stroke = "#22d3ee";
   for (const [a, b] of ICOSA_EDGES) {
     const ta = tracks[a]!;
     const tb = tracks[b]!;
@@ -175,6 +177,20 @@ const renderSvg: CardRenderer<Data> = async ({
   const display = data.overview.name ?? data.overview.login;
   const subRight = `${data.overview.publicRepoCount} public repos · ${data.contrib.currentStreak}d streak`;
 
+  // Brand icon at the icosa center. The icosa is at radius
+  // SPHERE_R*0.55 (~72 units); the icon sits inside at ~90px diameter
+  // so it reads through the wireframe without overflowing. Painted
+  // BEFORE the icosa/dots so the wireframe spins over the static mark.
+  const githubIcon = brandIconAt({
+    cx: sphereCx,
+    cy: sphereCy,
+    size: 90,
+    pathD: GITHUB_PATH,
+    pathViewBox: GITHUB_VB,
+    fill: "#22d3ee",
+    opacity: 0.35,
+  });
+
   // Stats panel starts past the sphere's right edge.
   const panelX = sphereCx + SPHERE_R + 30;
 
@@ -197,9 +213,10 @@ const renderSvg: CardRenderer<Data> = async ({
       .cHead { font: 800 140px ui-monospace, SFMono-Regular, Menlo, monospace; fill: ${theme.text}; }
       .cLbl  { font: 600 14px ui-sans-serif, system-ui, sans-serif; fill: ${theme.textMuted}; letter-spacing: 0.22em; text-transform: uppercase; }
       .cFoot { font: 500 11px ui-sans-serif, system-ui, sans-serif; fill: ${theme.textMuted}; letter-spacing: 0.2em; }
-      /* Prism palette uses #fbbf24 for accents — gives a warm amber that
-         contrasts the cool rainbow dots. */
-      .cAccent { fill: #fbbf24; }
+      /* Neon palette uses #22d3ee for accents — cyan headline matches
+         the icosa stroke and the GitHub mark, contrasting the magenta
+         end of the dot band. */
+      .cAccent { fill: #22d3ee; }
       .cName, .cSub, .cHead, .cLbl, .cFoot {
         opacity: 0; animation: cFade 600ms ease-out forwards;
       }
@@ -215,6 +232,7 @@ const renderSvg: CardRenderer<Data> = async ({
   <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#cSheen)">
     <animateTransform attributeName="transform" type="translate" from="${-width} 0" to="${width} 0" dur="5.4s" repeatCount="indefinite"/>
   </rect>
+  ${githubIcon}
   ${icosa}
   ${sphereDots}
   <text class="cName" x="${panelX}" y="62">${esc(display)}</text>

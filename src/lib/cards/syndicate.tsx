@@ -135,9 +135,13 @@ const renderSvg: CardRenderer<Data> = async ({
       @keyframes latHue { 0% { filter: hue-rotate(0deg); } 100% { filter: hue-rotate(360deg); } }
       /* Counter-phased breathing — at any moment one layer is contracted
          while the other is expanded, so the lattice always has visible
-         content. transform-origin lives in the native 0-300 lattice
-         coords (after the outer translate/scale wrap). */
-      .lat-a, .lat-b { transform-origin: 150px 150px; transform-box: view-box; }
+         content. transform-box: fill-box makes the origin relative to
+         the element's own bounding box, so scale pivots at the lattice
+         geometric center regardless of where the outer translate/scale
+         wrap has positioned it in the banner. view-box was wrong —
+         it resolved 150px,150px in the OUTER svg coords, causing the
+         pattern to drift toward the banner's top-left as it shrank. */
+      .lat-a, .lat-b { transform-origin: 50% 50%; transform-box: fill-box; }
       .lat-a { animation: latPulseA 14s ease-in-out infinite; }
       .lat-b { animation: latPulseB 14s ease-in-out infinite; }
       @keyframes latPulseA { 0% { transform: scale(1); } 50% { transform: scale(0); } 100% { transform: scale(1); } }

@@ -10,13 +10,15 @@ import {
   buildKeyTimes,
 } from "./sphere-math";
 import { esc, fmtInt } from "./svg-helpers";
+import { brandIconAt, NITROTYPE_PATH, NITROTYPE_VB } from "./brand-icons";
 
 const DEFAULT_W = 1100;
 const DEFAULT_H = 340;
 
-// typing-orbit: nitrotype panel on the LEFT, neon-variant rotating
-// sphere on the RIGHT. Mirror of commits-orbit; together they read as
-// a left/right pair when stacked in the README.
+// typing-orbit: nitrotype panel on the LEFT, prism-variant rotating
+// sphere on the RIGHT (amber icosa over a full-rainbow dot band with
+// the Nitrotype "N" mark at center). Mirror of commits-orbit; together
+// they read as a left/right pair when stacked in the README.
 
 const Input = z.object({
   user: z
@@ -41,9 +43,9 @@ function buildSphereDots(cx: number, cy: number, dur: string): string {
   const points = fibonacciSphere(N_POINTS);
   const keyTimes = buildKeyTimes(N_KF);
 
-  // Neon palette — cyan→magenta band keyed to latitude (matches orbit?v=neon).
+  // Prism palette: wide hue spread across latitude — matches orbit?v=prism.
   const hueFor = (lat: number) =>
-    `hsl(${(((lat + Math.PI / 2) / Math.PI) * 80 + 270).toFixed(0)}, 95%, 60%)`;
+    `hsl(${(((lat + Math.PI / 2) / Math.PI) * 360).toFixed(0)}, 85%, 60%)`;
 
   const initial = points.map((p) => {
     const x0 = SPHERE_R * Math.cos(p.lat) * Math.sin(p.lon);
@@ -119,8 +121,8 @@ function buildIcosa(
   }
 
   const out: string[] = [];
-  // Neon icosa stroke (matches orbit?v=neon).
-  const stroke = "#22d3ee";
+  // Prism icosa stroke (matches orbit?v=prism).
+  const stroke = "#fbbf24";
   for (const [a, b] of ICOSA_EDGES) {
     const ta = tracks[a]!;
     const tb = tracks[b]!;
@@ -180,16 +182,27 @@ const renderSvg: CardRenderer<Data> = async ({
   const sphereCy = height / 2;
   const sphereDots = buildSphereDots(sphereCx, sphereCy, "22s");
   const icosa = buildIcosa(sphereCx, sphereCy, SPHERE_R * 0.55, "14s");
+  // Brand icon at the icosa center — Nitrotype "N" mark behind the
+  // wireframe. Amber to match the prism palette's icosa stroke.
+  const ntIcon = brandIconAt({
+    cx: sphereCx,
+    cy: sphereCy,
+    size: 100,
+    pathD: NITROTYPE_PATH,
+    pathViewBox: NITROTYPE_VB,
+    fill: "#fbbf24",
+    opacity: 0.35,
+  });
 
   const avgCount = buildCountUp(r.avgSpeed, 22);
   const peakCount = buildCountUp(r.highestSpeed, 22);
   const racesCount = buildCountUp(r.racesPlayed, 18);
   const display = r.displayName ?? r.username;
 
-  // Neon palette tier stripe — cyan top edge.
+  // Prism palette tier stripe — diamond falls back to amber to match.
   const tierColor =
     r.leagueTier >= 5
-      ? "#22d3ee"
+      ? "#fde047"
       : r.leagueTier === 4
         ? "#e5e7eb"
         : r.leagueTier === 3
@@ -198,7 +211,7 @@ const renderSvg: CardRenderer<Data> = async ({
             ? "#94a3b8"
             : r.leagueTier === 1
               ? "#a16207"
-              : "#22d3ee";
+              : "#fbbf24";
 
   return {
     contentType: "image/svg+xml; charset=utf-8",
@@ -209,9 +222,9 @@ const renderSvg: CardRenderer<Data> = async ({
       <stop offset="90%" stop-color="${theme.bg}" stop-opacity="1"/>
     </radialGradient>
     <linearGradient id="toSheen" x1="0%" y1="0%" x2="100%" y2="0%">
-      <stop offset="0%" stop-color="#22d3ee" stop-opacity="0"/>
-      <stop offset="50%" stop-color="#22d3ee" stop-opacity="0.20"/>
-      <stop offset="100%" stop-color="#22d3ee" stop-opacity="0"/>
+      <stop offset="0%" stop-color="#fbbf24" stop-opacity="0"/>
+      <stop offset="50%" stop-color="#fbbf24" stop-opacity="0.20"/>
+      <stop offset="100%" stop-color="#fbbf24" stop-opacity="0"/>
     </linearGradient>
     <style>
       .tName { font: 700 22px ui-sans-serif, system-ui, sans-serif; fill: ${theme.text}; }
@@ -222,7 +235,7 @@ const renderSvg: CardRenderer<Data> = async ({
       .tNum  { font: 700 24px ui-monospace, SFMono-Regular, Menlo, monospace; fill: ${theme.text}; }
       .tTier { font: 700 11px ui-sans-serif, system-ui, sans-serif; fill: ${tierColor}; letter-spacing: 0.22em; }
       .tFoot { font: 500 11px ui-sans-serif, system-ui, sans-serif; fill: ${theme.textMuted}; letter-spacing: 0.2em; }
-      .tAccent { fill: #22d3ee; }
+      .tAccent { fill: #fbbf24; }
       .tName, .tSub, .tHead, .tUnit, .tLbl, .tNum, .tTier, .tFoot {
         opacity: 0; animation: tFade 600ms ease-out forwards;
       }
@@ -241,6 +254,7 @@ const renderSvg: CardRenderer<Data> = async ({
   <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#toSheen)">
     <animateTransform attributeName="transform" type="translate" from="${-width} 0" to="${width} 0" dur="5.4s" repeatCount="indefinite"/>
   </rect>
+  ${ntIcon}
   ${icosa}
   ${sphereDots}
 
@@ -278,7 +292,7 @@ export const typingOrbitCard: Card<Input, Data> = {
   meta: {
     title: "Typing speed + orbit",
     description:
-      "Nitrotype WPM panel on the left, neon-variant rotating sphere on the right. Mirrors commits-orbit; pairs visually when both are stacked in a README.",
+      "Nitrotype WPM panel on the left, prism-variant rotating sphere on the right with the Nitrotype N mark at the icosa center. Mirrors commits-orbit (which uses the neon palette + GitHub mark); pairs visually when both are stacked.",
     dimensions: ["user"],
     supportsAnimation: true,
   },
