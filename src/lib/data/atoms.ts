@@ -160,6 +160,73 @@ export const userContributions = atom(
   },
 );
 
+export type UserLifetime = {
+  login: string;
+  /**
+   * Sum of GitHub commit contributions (public + restricted) across all
+   * yearly buckets from {@link yearsRange.start} to the current year.
+   * Approximate: contributionsCollection's `from`/`to` window can't
+   * exceed a year, so we batch one aliased query per year in a single
+   * GraphQL request.
+   */
+  lifetimeCommits: number;
+  yearsRange: { start: number; end: number };
+};
+
+export const userLifetime = atom(
+  "userLifetime",
+  async ({ login }: { login: string }): Promise<UserLifetime> => {
+    const now = new Date();
+    const endYear = now.getUTCFullYear();
+    // 2016 is the floor — earlier years are diminishing returns for the
+    // banner subtext, and adding more aliases bloats the response size.
+    // GitHub-joining dates older than this will lose a small amount of
+    // historical context, which we accept for the simpler query shape.
+    const startYear = 2016;
+    const years: number[] = [];
+    for (let y = startYear; y <= endYear; y++) years.push(y);
+
+    // Aliased contributionsCollection queries — one per year, all in one
+    // round trip. The Next fetch cache dedupes across requests.
+    const aliases = years
+      .map(
+        (y) =>
+          `y${y}: contributionsCollection(from: "${y}-01-01T00:00:00Z", to: "${y}-12-31T23:59:59Z") { totalCommitContributions restrictedContributionsCount }`,
+      )
+      .join("\n            ");
+
+    type Bucket = {
+      totalCommitContributions: number;
+      restrictedContributionsCount: number;
+    };
+    const res = await gh()<{
+      user: ({ login: string } & Record<string, Bucket>) | null;
+    }>(
+      `query($login: String!) {
+        user(login: $login) {
+          login
+          ${aliases}
+        }
+      }`,
+      { login },
+    );
+    if (!res.user) throw new Error(`User "${login}" not found`);
+    let total = 0;
+    for (const y of years) {
+      const b = (res.user as unknown as Record<string, Bucket | undefined>)[
+        `y${y}`
+      ];
+      if (b)
+        total += b.totalCommitContributions + b.restrictedContributionsCount;
+    }
+    return {
+      login: res.user.login,
+      lifetimeCommits: total,
+      yearsRange: { start: startYear, end: endYear },
+    };
+  },
+);
+
 export type UserTopLanguages = Array<{
   name: string;
   color: string | null;

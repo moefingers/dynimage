@@ -3,8 +3,10 @@ import type { Card, CardRenderer } from "./types";
 import {
   userOverview,
   userContributions,
+  userLifetime,
   type UserOverview,
   type UserContributions,
+  type UserLifetime,
 } from "@/lib/data/atoms";
 import {
   DEFAULT_ORIENTATION,
@@ -37,6 +39,7 @@ type Input = z.infer<typeof Input>;
 type Data = {
   overview: UserOverview;
   contrib: UserContributions;
+  lifetime: UserLifetime;
 };
 
 const N_POINTS = 50;
@@ -228,18 +231,20 @@ const renderSvg: CardRenderer<Data> = async ({
       .cSub  { font: 500 13px ui-monospace, SFMono-Regular, Menlo, monospace; fill: ${theme.textMuted}; letter-spacing: 0.06em; }
       .cHead { font: 800 140px ui-monospace, SFMono-Regular, Menlo, monospace; fill: ${theme.text}; }
       .cLbl  { font: 600 14px ui-sans-serif, system-ui, sans-serif; fill: ${theme.textMuted}; letter-spacing: 0.22em; text-transform: uppercase; }
+      .cLife { font: 600 12px ui-monospace, SFMono-Regular, Menlo, monospace; fill: ${theme.textMuted}; letter-spacing: 0.06em; }
       .cFoot { font: 500 11px ui-sans-serif, system-ui, sans-serif; fill: ${theme.textMuted}; letter-spacing: 0.2em; }
       /* Neon palette uses #22d3ee for accents — cyan headline matches
          the icosa stroke and the GitHub mark, contrasting the magenta
          end of the dot band. */
       .cAccent { fill: #22d3ee; }
-      .cName, .cSub, .cHead, .cLbl, .cFoot {
+      .cName, .cSub, .cHead, .cLbl, .cLife, .cFoot {
         opacity: 0; animation: cFade 600ms ease-out forwards;
       }
       .cName { animation-delay: 80ms; }
       .cSub  { animation-delay: 180ms; }
       .cHead { animation-delay: 300ms; }
       .cLbl  { animation-delay: 380ms; }
+      .cLife { animation-delay: 440ms; }
       .cFoot { animation-delay: 520ms; }
       @keyframes cFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     </style>
@@ -256,6 +261,7 @@ const renderSvg: CardRenderer<Data> = async ({
   <text class="cSub"  x="${panelX}" y="84">@${esc(data.overview.login)} · ${esc(subRight)}</text>
   <text class="cHead cAccent" x="${panelX}" y="232">${fmtInt(total)}<animate attributeName="textContent" values="${countUp}" dur="1.6s" fill="freeze" begin="0.4s"/></text>
   <text class="cLbl"  x="${panelX}" y="262">COMMITS · LAST YEAR</text>
+  <text class="cLife" x="${panelX}" y="288">${fmtInt(data.lifetime.lifetimeCommits)} since ${data.lifetime.yearsRange.start} · all-time</text>
   <text class="cFoot" x="${width - 28}" y="${height - 18}" text-anchor="end">GITHUB · LIVE · DYNIMAGE</text>
 </svg>`,
   };
@@ -267,11 +273,12 @@ export const commitsOrbitCard: Card<Input, Data> = {
   defaultSize: { width: DEFAULT_W, height: DEFAULT_H },
   input: Input,
   resolve: async (input, cache) => {
-    const [overview, contrib] = await Promise.all([
+    const [overview, contrib, lifetime] = await Promise.all([
       userOverview({ login: input.user }, cache),
       userContributions({ login: input.user }, cache),
+      userLifetime({ login: input.user }, cache),
     ]);
-    return { overview, contrib };
+    return { overview, contrib, lifetime };
   },
   formats: {
     svg: renderSvg,

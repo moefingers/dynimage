@@ -152,22 +152,27 @@ const renderSvg: CardRenderer<Data> = async ({
 
   <rect width="${width}" height="${height}" rx="20" ry="20" fill="url(#sBgWhole)" stroke="${theme.stroke}" stroke-width="1"/>
 
-  <!-- Brand lattice. Layer A rotates one way, layer B (already offset
-       ~15° in the source) rotates the other direction. Each layer also
-       breathes — scale 0 ↔ 1 on a 14s loop, counter-phased between
-       the layers — so as one contracts the other expands and they
-       pass through each other in place. The static outer transform
-       moves (0,0) of the inner coord system to the banner's lattice
-       center, so every SMIL scale/rotate already pivots around it. -->
+  <!-- Brand lattice. Two layers — A spins one way, B (already offset
+       ~15° in the source) spins the other. Each layer also breathes
+       counter-phased with the other on a 14s loop.
+
+       Critical nesting: the SMIL animateTransform's go on the OUTER
+       <g>, and the path is wrapped by an INNER <g transform="translate
+       (-150 -150)"> that shifts its native (150,150) center to the
+       outer g's (0,0) BEFORE any animation applies. If the translate
+       were on the outer g instead, additive="sum" would stack the
+       rotate/scale AFTER the translate in the transform list — and
+       since SVG applies transforms right-to-left, the rotate would
+       happen first (around its own origin) and the translate would
+       drag the rotated geometry off-center each frame, making the
+       whole lattice orbit around the banner center instead of
+       staying put. -->
   <g class="lattice-hue" mask="url(#sLatticeMask)" opacity="0.85">
     <g transform="${latticeOuterTx}">
-      <g transform="translate(-150 -150)">
-        <path d="${SYNDICATE_LATTICE_PATH_A}" fill="none" stroke="url(#sLatticeGrad)" stroke-width="1.4" stroke-linejoin="round"/>
-        <!-- additive="sum" on type="scale" stacks ON TOP of the parent
-             transform list, so scale pivots around the parent's (0,0)
-             = banner lattice center. Same for the rotate. The path is
-             pre-translated by (-150,-150) so its native (150,150)
-             center sits at the same (0,0). -->
+      <g>
+        <g transform="translate(-150 -150)">
+          <path d="${SYNDICATE_LATTICE_PATH_A}" fill="none" stroke="url(#sLatticeGrad)" stroke-width="1.4" stroke-linejoin="round"/>
+        </g>
         <animateTransform attributeName="transform" type="rotate"
           values="0;360" dur="120s" repeatCount="indefinite" additive="sum"/>
         <animateTransform attributeName="transform" type="scale"
@@ -175,8 +180,10 @@ const renderSvg: CardRenderer<Data> = async ({
           calcMode="spline" keySplines="0.42 0 0.58 1; 0.42 0 0.58 1"
           dur="14s" repeatCount="indefinite" additive="sum"/>
       </g>
-      <g transform="translate(-150 -150)">
-        <path d="${SYNDICATE_LATTICE_PATH_B}" fill="none" stroke="url(#sLatticeGradB)" stroke-width="1.4" stroke-linejoin="round"/>
+      <g>
+        <g transform="translate(-150 -150)">
+          <path d="${SYNDICATE_LATTICE_PATH_B}" fill="none" stroke="url(#sLatticeGradB)" stroke-width="1.4" stroke-linejoin="round"/>
+        </g>
         <animateTransform attributeName="transform" type="rotate"
           values="360;0" dur="160s" repeatCount="indefinite" additive="sum"/>
         <animateTransform attributeName="transform" type="scale"
