@@ -63,15 +63,20 @@ const renderSvg: CardRenderer<Data> = async ({
   // Two lattice instances — fill most of the banner's vertical extent
   // and bleed past the horizontal edges so the geometry feels infinite.
   // The native viewBox is 300×300; we scale uniformly to lattice_size
-  // and translate to center the (150,150) anchor point.
+  // and we want the path's (150,150) center to sit at the banner
+  // center (latticeCx, latticeCy). Compose all animations around that
+  // local center using pure-SMIL animateTransform with additive="sum"
+  // so the scale + rotate stack as separate transform-list entries —
+  // no CSS bbox guessing, no drift toward the banner corners.
   const latticeSize = Math.max(height * 1.5, 500);
   const latticeCx = width / 2;
   const latticeCy = height / 2;
   const scale = latticeSize / SYNDICATE_LATTICE_VB;
-  // Pre-translate so each path's (150,150) center lands at (0,0) prior
-  // to the per-element rotateTransform animation; then scale, then
-  // translate to the banner center.
-  const latticeTx = `translate(${latticeCx} ${latticeCy}) scale(${scale.toFixed(4)}) translate(-150 -150)`;
+  // Outer static wrap: shift origin to (latticeCx, latticeCy), then
+  // apply uniform scale. After this, the inner coord system has (0,0)
+  // at the banner center; the path needs translate(-150,-150) to sit
+  // around that center.
+  const latticeOuterTx = `translate(${latticeCx} ${latticeCy}) scale(${scale.toFixed(4)})`;
 
   const tileEls = TILES.map((t, i) => {
     const x = PAD + i * (tileW + 14);
@@ -133,19 +138,11 @@ const renderSvg: CardRenderer<Data> = async ({
       .tSub  { font: 500 13px ui-sans-serif, system-ui, sans-serif; fill: ${theme.textMuted}; }
       .lattice-hue { animation: latHue 22s linear infinite; transform-origin: center; }
       @keyframes latHue { 0% { filter: hue-rotate(0deg); } 100% { filter: hue-rotate(360deg); } }
-      /* Counter-phased breathing — at any moment one layer is contracted
-         while the other is expanded, so the lattice always has visible
-         content. transform-box: fill-box makes the origin relative to
-         the element's own bounding box, so scale pivots at the lattice
-         geometric center regardless of where the outer translate/scale
-         wrap has positioned it in the banner. view-box was wrong —
-         it resolved 150px,150px in the OUTER svg coords, causing the
-         pattern to drift toward the banner's top-left as it shrank. */
-      .lat-a, .lat-b { transform-origin: 50% 50%; transform-box: fill-box; }
-      .lat-a { animation: latPulseA 14s ease-in-out infinite; }
-      .lat-b { animation: latPulseB 14s ease-in-out infinite; }
-      @keyframes latPulseA { 0% { transform: scale(1); } 50% { transform: scale(0); } 100% { transform: scale(1); } }
-      @keyframes latPulseB { 0% { transform: scale(0); } 50% { transform: scale(1); } 100% { transform: scale(0); } }
+      /* Counter-phased breathing now driven entirely by SMIL — see the
+         animateTransform pair on each lattice group below. CSS-driven
+         scale was abandoned because transform-box: fill-box still
+         picked up the SMIL-rotated bounding box, which expands during
+         the rotation cycle and shifted the apparent scale pivot. */
       .brand { opacity: 0; animation: fadeUp 700ms cubic-bezier(.2,.7,.2,1) 140ms both; }
       .tag   { opacity: 0; animation: fadeUp 700ms cubic-bezier(.2,.7,.2,1) 240ms both; }
       ${tileDelays}
@@ -155,22 +152,37 @@ const renderSvg: CardRenderer<Data> = async ({
 
   <rect width="${width}" height="${height}" rx="20" ry="20" fill="url(#sBgWhole)" stroke="${theme.stroke}" stroke-width="1"/>
 
-  <!-- Brand lattice. Layer A rotates one way; layer B (already offset
-       ~15° in the source) rotates the other direction. Together they
-       give the slow counter-spin you see on infinite-syndicate.com. -->
+  <!-- Brand lattice. Layer A rotates one way, layer B (already offset
+       ~15° in the source) rotates the other direction. Each layer also
+       breathes — scale 0 ↔ 1 on a 14s loop, counter-phased between
+       the layers — so as one contracts the other expands and they
+       pass through each other in place. The static outer transform
+       moves (0,0) of the inner coord system to the banner's lattice
+       center, so every SMIL scale/rotate already pivots around it. -->
   <g class="lattice-hue" mask="url(#sLatticeMask)" opacity="0.85">
-    <g transform="${latticeTx}">
-      <g class="lat-a">
-        <g transform-origin="150 150">
-          <path d="${SYNDICATE_LATTICE_PATH_A}" fill="none" stroke="url(#sLatticeGrad)" stroke-width="1.4" stroke-linejoin="round"/>
-          <animateTransform attributeName="transform" type="rotate" from="0 150 150" to="360 150 150" dur="120s" repeatCount="indefinite"/>
-        </g>
+    <g transform="${latticeOuterTx}">
+      <g transform="translate(-150 -150)">
+        <path d="${SYNDICATE_LATTICE_PATH_A}" fill="none" stroke="url(#sLatticeGrad)" stroke-width="1.4" stroke-linejoin="round"/>
+        <!-- additive="sum" on type="scale" stacks ON TOP of the parent
+             transform list, so scale pivots around the parent's (0,0)
+             = banner lattice center. Same for the rotate. The path is
+             pre-translated by (-150,-150) so its native (150,150)
+             center sits at the same (0,0). -->
+        <animateTransform attributeName="transform" type="rotate"
+          values="0;360" dur="120s" repeatCount="indefinite" additive="sum"/>
+        <animateTransform attributeName="transform" type="scale"
+          values="1;0;1" keyTimes="0;0.5;1"
+          calcMode="spline" keySplines="0.42 0 0.58 1; 0.42 0 0.58 1"
+          dur="14s" repeatCount="indefinite" additive="sum"/>
       </g>
-      <g class="lat-b">
-        <g transform-origin="150 150">
-          <path d="${SYNDICATE_LATTICE_PATH_B}" fill="none" stroke="url(#sLatticeGradB)" stroke-width="1.4" stroke-linejoin="round"/>
-          <animateTransform attributeName="transform" type="rotate" from="360 150 150" to="0 150 150" dur="160s" repeatCount="indefinite"/>
-        </g>
+      <g transform="translate(-150 -150)">
+        <path d="${SYNDICATE_LATTICE_PATH_B}" fill="none" stroke="url(#sLatticeGradB)" stroke-width="1.4" stroke-linejoin="round"/>
+        <animateTransform attributeName="transform" type="rotate"
+          values="360;0" dur="160s" repeatCount="indefinite" additive="sum"/>
+        <animateTransform attributeName="transform" type="scale"
+          values="0;1;0" keyTimes="0;0.5;1"
+          calcMode="spline" keySplines="0.42 0 0.58 1; 0.42 0 0.58 1"
+          dur="14s" repeatCount="indefinite" additive="sum"/>
       </g>
     </g>
   </g>

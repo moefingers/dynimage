@@ -19,8 +19,9 @@ export const NITROTYPE_VB = 260;
 /**
  * Emit a centered, scaled brand icon at (cx, cy) of the embedding SVG.
  * The icon is rendered behind the icosahedron in the compound cards so
- * the wireframe rotates over it. A subtle <animate> pulses opacity for
- * life without competing with the spinning geometry.
+ * the wireframe rotates over it. A SMIL <animate> on opacity gives it a
+ * slow breath — dimmest 25% of peak, brightest a touch above peak — so
+ * it visibly fades in and out behind the wireframe.
  */
 export function brandIconAt(opts: {
   cx: number;
@@ -29,19 +30,43 @@ export function brandIconAt(opts: {
   pathD: string;
   pathViewBox: number;
   fill: string;
-  opacity?: number;
+  /** Peak opacity at the breath's brightest moment. */
+  peakOpacity?: number;
+  /** Lowest opacity at the breath's dimmest moment. Defaults to 22% of peak. */
+  dimOpacity?: number;
+  /** Full breath cycle in seconds. */
+  dur?: string;
   ariaLabel?: string;
 }): string {
-  const { cx, cy, size, pathD, pathViewBox, fill, opacity = 0.55 } = opts;
+  const {
+    cx,
+    cy,
+    size,
+    pathD,
+    pathViewBox,
+    fill,
+    peakOpacity = 0.65,
+    dimOpacity,
+    dur = "5.4s",
+  } = opts;
+  const dim = dimOpacity ?? peakOpacity * 0.22;
   // Translate so that the icon's center lands at (cx, cy), then scale
   // the path's native viewBox down to `size`. The path is centered on
   // the viewBox midpoint by construction (both source icons are).
   const scale = size / pathViewBox;
   const tx = cx - size / 2;
   const ty = cy - size / 2;
-  return `<g transform="translate(${tx.toFixed(2)} ${ty.toFixed(2)}) scale(${scale.toFixed(5)})" opacity="${opacity}">
-    <path d="${pathD}" fill="${fill}">
-      <animate attributeName="opacity" values="${(opacity * 0.7).toFixed(2)};${opacity.toFixed(2)};${(opacity * 0.7).toFixed(2)}" dur="6s" repeatCount="indefinite"/>
+  // SMIL animate on the <path>'s opacity attribute. `calcMode="spline"`
+  // with an ease-in-out control point gives a soft breath rather than a
+  // linear ramp — feels more alive at this slow tempo.
+  return `<g transform="translate(${tx.toFixed(2)} ${ty.toFixed(2)}) scale(${scale.toFixed(5)})">
+    <path d="${pathD}" fill="${fill}" opacity="${peakOpacity}">
+      <animate attributeName="opacity"
+               values="${dim.toFixed(2)};${peakOpacity.toFixed(2)};${dim.toFixed(2)}"
+               keyTimes="0;0.5;1"
+               calcMode="spline"
+               keySplines="0.42 0 0.58 1; 0.42 0 0.58 1"
+               dur="${dur}" repeatCount="indefinite"/>
     </path>
   </g>`;
 }

@@ -187,11 +187,15 @@ const renderSvg: CardRenderer<Data> = async ({
   const ntIcon = brandIconAt({
     cx: sphereCx,
     cy: sphereCy,
-    size: 100,
+    size: 108,
     pathD: NITROTYPE_PATH,
     pathViewBox: NITROTYPE_VB,
     fill: "#fbbf24",
-    opacity: 0.35,
+    // Slightly offset breath from commits-orbit (6.2s vs 5.4s) so when
+    // both banners are visible the pulses drift in and out of phase.
+    peakOpacity: 0.7,
+    dimOpacity: 0.12,
+    dur: "6.2s",
   });
 
   const avgCount = buildCountUp(r.avgSpeed, 22);
@@ -220,6 +224,15 @@ const renderSvg: CardRenderer<Data> = async ({
     <radialGradient id="toBg" cx="80%" cy="50%" r="80%">
       <stop offset="0%" stop-color="${theme.gradient}" stop-opacity="0.55"/>
       <stop offset="90%" stop-color="${theme.bg}" stop-opacity="1"/>
+    </radialGradient>
+    <!-- Rim glow keyed to the sphere position on the right side of the
+         banner — amber-warm to match the prism palette + the icosa
+         stroke. Stacks under the side-anchored toBg radial above. -->
+    <radialGradient id="toRim" cx="${sphereCx}" cy="${sphereCy}" r="${SPHERE_R + 30}" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"  stop-color="#fbbf24" stop-opacity="0.30"/>
+      <stop offset="55%" stop-color="#fb923c" stop-opacity="0.16"/>
+      <stop offset="90%" stop-color="#fb923c" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="${theme.bg}" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="toSheen" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#fbbf24" stop-opacity="0"/>
@@ -251,6 +264,7 @@ const renderSvg: CardRenderer<Data> = async ({
     </style>
   </defs>
   <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#toBg)" stroke="${theme.stroke}" stroke-width="1"/>
+  <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#toRim)"/>
   <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#toSheen)">
     <animateTransform attributeName="transform" type="translate" from="${-width} 0" to="${width} 0" dur="5.4s" repeatCount="indefinite"/>
   </rect>

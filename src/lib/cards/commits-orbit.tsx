@@ -184,11 +184,16 @@ const renderSvg: CardRenderer<Data> = async ({
   const githubIcon = brandIconAt({
     cx: sphereCx,
     cy: sphereCy,
-    size: 90,
+    size: 96,
     pathD: GITHUB_PATH,
     pathViewBox: GITHUB_VB,
     fill: "#22d3ee",
-    opacity: 0.35,
+    // Breath between ~0.12 (barely there) and 0.7 (clearly the GitHub
+    // mark) on a 5.4s loop — visible without competing with the
+    // wireframe.
+    peakOpacity: 0.7,
+    dimOpacity: 0.12,
+    dur: "5.4s",
   });
 
   // Stats panel starts past the sphere's right edge.
@@ -201,6 +206,17 @@ const renderSvg: CardRenderer<Data> = async ({
     <radialGradient id="cBg" cx="20%" cy="50%" r="80%">
       <stop offset="0%" stop-color="${theme.gradient}" stop-opacity="0.55"/>
       <stop offset="90%" stop-color="${theme.bg}" stop-opacity="1"/>
+    </radialGradient>
+    <!-- Center-radial rim glow keyed to the sphere position. Same
+         primitive the standalone neon orbit uses for its halo —
+         applied here under the dots/icosa so the sphere reads as if
+         it's lit from within. userSpaceOnUse so cx/cy are absolute
+         banner coords rather than relative to a placeholder rect. -->
+    <radialGradient id="cRim" cx="${sphereCx}" cy="${sphereCy}" r="${SPHERE_R + 30}" gradientUnits="userSpaceOnUse">
+      <stop offset="0%"  stop-color="#a855f7" stop-opacity="0.30"/>
+      <stop offset="55%" stop-color="#22d3ee" stop-opacity="0.16"/>
+      <stop offset="90%" stop-color="#22d3ee" stop-opacity="0.05"/>
+      <stop offset="100%" stop-color="${theme.bg}" stop-opacity="0"/>
     </radialGradient>
     <linearGradient id="cSheen" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="${theme.accent}" stop-opacity="0"/>
@@ -229,6 +245,7 @@ const renderSvg: CardRenderer<Data> = async ({
     </style>
   </defs>
   <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#cBg)" stroke="${theme.stroke}" stroke-width="1"/>
+  <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#cRim)"/>
   <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#cSheen)">
     <animateTransform attributeName="transform" type="translate" from="${-width} 0" to="${width} 0" dur="5.4s" repeatCount="indefinite"/>
   </rect>
