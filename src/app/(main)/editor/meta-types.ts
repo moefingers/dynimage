@@ -67,6 +67,7 @@ export type PresetEntry = {
   title: string;
   description: string;
   subjectKinds: string[];
+  defaultSubject: string;
 };
 
 export type Meta = {

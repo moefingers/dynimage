@@ -64,6 +64,7 @@ export async function GET() {
     title: p.title,
     description: p.description,
     subjectKinds: p.subjectKinds,
+    defaultSubject: p.defaultSubject,
   }));
 
   return Response.json(
