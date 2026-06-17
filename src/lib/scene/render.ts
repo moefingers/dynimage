@@ -3,6 +3,7 @@ import path from "node:path";
 import type { CardFormat, Theme } from "@/lib/cards/types";
 import { resolveTheme } from "@/lib/cards/theme";
 import { DedupeCache } from "@/lib/data/cache";
+import type { RenderContext } from "@/lib/data/seam";
 import type { Scene } from "./scene-spec";
 import { getElement } from "./registry";
 import { resolveBind } from "./bind";
@@ -88,7 +89,7 @@ type Prepared = {
 
 async function prepareElements(
   scene: Scene,
-  cache: DedupeCache,
+  ctx: RenderContext,
 ): Promise<{ prepared: Prepared[]; placed: PlacedElement[] }> {
   const prepared: Prepared[] = [];
   const placed: PlacedElement[] = [];
@@ -112,7 +113,7 @@ async function prepareElements(
           `Element "${spec.id}" (${spec.type}) does not accept a data bind.`,
         );
       }
-      bound = await resolveBind(spec.bind, cache);
+      bound = await resolveBind(spec.bind, ctx);
     }
     prepared.push({
       id: spec.id,
@@ -145,9 +146,9 @@ async function composeSvg(
   theme: Theme,
   baseUrl: string,
   raster: boolean,
+  ctx: RenderContext,
 ): Promise<string> {
-  const cache = new DedupeCache();
-  const { prepared, placed } = await prepareElements(scene, cache);
+  const { prepared, placed } = await prepareElements(scene, ctx);
   const boxes = resolveBoxes(placed);
 
   // z-order: stable sort by z (ties keep declaration order).
@@ -205,10 +206,18 @@ export async function renderScene(
   format: CardFormat,
   baseUrl: string,
   overrides?: URLSearchParams,
+  ctx?: RenderContext,
 ): Promise<RenderedScene> {
+  // Normalize the context: default anonymous, and always give the seam a
+  // per-render L1 (it dedups reads AND memoizes token selection on it).
+  const rctx: RenderContext = {
+    owner: ctx?.owner ?? null,
+    waitUntil: ctx?.waitUntil,
+    l1: ctx?.l1 ?? new DedupeCache(),
+  };
   const theme = resolveSceneTheme(scene, overrides);
   const raster = format !== "svg";
-  const svg = await composeSvg(scene, theme, baseUrl, raster);
+  const svg = await composeSvg(scene, theme, baseUrl, raster, rctx);
 
   if (format === "svg") {
     return { body: svg, contentType: "image/svg+xml; charset=utf-8" };
