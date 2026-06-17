@@ -1,0 +1,10 @@
+# pnpm 11 reads build-script approval from this file's `allowBuilds` map
+# (not the legacy package.json `pnpm.onlyBuiltDependencies` list, which
+# pnpm 11 ignores). These packages ship prebuilt platform binaries via
+# optional deps; allowing their build scripts keeps `pnpm install` from
+# treating them as unapproved ignored builds (a fatal error under
+# pnpm 11's strict-dep-builds default).
+allowBuilds:
+  "@napi-rs/canvas": true
+  sharp: true
+  unrs-resolver: true
