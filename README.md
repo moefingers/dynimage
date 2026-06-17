@@ -116,7 +116,14 @@ GET /api/render?format=png&spec=<base64-of-LayoutSpec>
 GET /api/render?format=svg&spec=<base64>     # vector + animation preserved
 GET /api/render?format=avif&spec=<base64>    # smallest payload
 GET /api/render?format=png&spec=<base64>&z=1 # set z=1 if spec is gzipped before base64
+
+GET /api/render?format=svg&scene=<base64url-of-Scene>      # scene/element model
+GET /api/render?format=svg&c=<base64url(gzip(json))>&z=1   # Tier-2 compressed blob (editor output)
 ```
+
+`?c=` is the compressed sibling of `?scene=`: the codec unwraps its versioned
+envelope to a Scene and renders the identical output (`z=1` when gzipped;
+omit `z` for small payloads the encoder ships raw).
 
 **POST** — for server-to-server callers (sync scripts, build tools). JSON body, image bytes back:
 
