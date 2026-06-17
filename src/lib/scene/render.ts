@@ -40,15 +40,42 @@ function fontDataUri(): string {
   return fontDataUriCached;
 }
 
+// SMIL event/syncbase names that can follow an id in a `begin`/`end`
+// timing value (e.g. `spin.end`, `btn.click+0.5s`, `loop.repeat(2)`).
+const SMIL_EVENTS =
+  "begin|end|click|mousedown|mouseup|mouseover|mouseout|mousemove|focus|focusin|focusout|activate|load|resize|scroll|zoom|repeat|accessKey";
+
 // Prefix every internal id (and its references) in an element's fragment
 // with a per-element namespace so two instances of the same element type
-// can never collide on a <defs> id like "wash". THIS is the model-level
-// fix for compound id-collisions.
+// can never collide on an internal id (a <defs> "wash", a SMIL "spin").
+// THIS is the model-level fix for compound id-collisions (Stab #2).
+//
+// `ns` MUST be derived from the element's INDEX, not its user-supplied id:
+// an index is pure digits, so `eN__` delimits unambiguously, whereas a
+// user id containing the separator could collide (id "a"+internal "b__c"
+// vs id "a__b"+internal "c" both → "a__b__c"). See wrapFragment.
+//
+// Covers: id="x", url(#x), (xlink:)href="#x", AND SMIL syncbase/event refs
+// inside begin=/end= values (`x.end`, `x.click+1s`, `x.repeat(2)`). Numeric
+// clock values (`0.4s`) start with a digit and are skipped by the id-start
+// class, so they're left untouched.
 function namespaceIds(fragment: string, ns: string): string {
-  return fragment
+  let out = fragment
     .replace(/\bid="([^"]+)"/g, `id="${ns}$1"`)
     .replace(/url\(#([^)]+)\)/g, `url(#${ns}$1)`)
     .replace(/(\bhref|\bxlink:href)="#([^"]+)"/g, `$1="#${ns}$2"`);
+  const smilRef = new RegExp(
+    `([A-Za-z_][A-Za-z0-9_-]*)\\.(${SMIL_EVENTS})\\b`,
+    "g",
+  );
+  out = out.replace(/\b(begin|end)="([^"]*)"/g, (_m, attr, val: string) => {
+    const rewritten = val.replace(
+      smilRef,
+      (_r, idref: string, event: string) => `${ns}${idref}.${event}`,
+    );
+    return `${attr}="${rewritten}"`;
+  });
+  return out;
 }
 
 type Prepared = {
@@ -129,7 +156,7 @@ async function composeSvg(
     .sort((a, b) => a.p.z - b.p.z || a.i - b.i);
 
   const layers: string[] = [];
-  for (const { p } of order) {
+  for (const { p, i } of order) {
     const box = boxes.get(p.id)!;
     const fragment = await p.element.render({
       knobs: p.knobs,
@@ -139,7 +166,9 @@ async function composeSvg(
       baseUrl,
       raster,
     });
-    layers.push(wrapFragment(fragment, box, `${p.id}__`));
+    // Namespace by element INDEX (pure digits → unambiguous delimiter),
+    // not by the user-supplied id which could contain the separator.
+    layers.push(wrapFragment(fragment, box, `e${i}__`));
   }
 
   const { w, h } = scene.canvas;

@@ -19,6 +19,21 @@ type Input = z.infer<typeof Input>;
 
 type Data = Input;
 
+// Single-sourced presentation constant shared by the SVG and Satori
+// renderers so the unfilled track reads identically across formats
+// (Stab #5: cross-format parity). The SVG path previously hardcoded 0.5
+// while the Satori track was fully opaque.
+const TRACK_OPACITY = 0.5;
+
+// Build the Satori track background: the stroke color at TRACK_OPACITY.
+// Hex-only (theme strokes are hex); passes other values through.
+function trackBg(hex: string): string {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1]!, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${TRACK_OPACITY})`;
+}
+
 const renderSvg: CardRenderer<Data> = async ({
   data,
   theme,
@@ -48,7 +63,7 @@ const renderSvg: CardRenderer<Data> = async ({
       ? `<text x="${width - pad}" y="${pad + 12}" text-anchor="end" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="500" fill="${theme.textMuted}">${esc(valueText)}</text>`
       : ""
   }
-  <rect x="${pad}" y="${barY}" width="${barW}" height="${barH}" rx="${barH / 2}" ry="${barH / 2}" fill="${theme.stroke}" opacity="0.5"/>
+  <rect x="${pad}" y="${barY}" width="${barW}" height="${barH}" rx="${barH / 2}" ry="${barH / 2}" fill="${theme.stroke}" opacity="${TRACK_OPACITY}"/>
   <rect x="${pad}" y="${barY}" width="${fillW}" height="${barH}" rx="${barH / 2}" ry="${barH / 2}" fill="${theme.accent}"/>
 </svg>`,
   };
@@ -96,7 +111,9 @@ const renderPng: CardRenderer<Data> = async ({
         style={{
           display: "flex",
           height: 20,
-          backgroundColor: theme.stroke,
+          // rgba (not container opacity) so only the track fades, not the
+          // filled child — matches the SVG path's separate-rect approach.
+          backgroundColor: trackBg(theme.stroke),
           borderRadius: 10,
           overflow: "hidden",
           marginTop: "auto",
