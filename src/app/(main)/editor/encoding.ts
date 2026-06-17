@@ -10,8 +10,8 @@ import type { Scene } from "@/lib/scene/scene-spec";
 //   • untweaked preset → ?preset=<name>&user=<id>     (Tier-0, shortest)
 //   • tweaked scene    → ?scene=<base64url(json)>      (Tier-1.5, readable)
 //                        auto-promote to ?c=<…>&z=…     (Tier-2) when shorter
-// Theme is appended per-variant (&theme=) so one config yields the
-// <picture> light/dark split.
+// The chosen theme is appended as &theme= (a FIXED palette for all viewers,
+// per design — see chosenTheme below); the embed is a single themed <img>.
 // ─────────────────────────────────────────────────────────────────────
 
 export type ConfigState = {
@@ -52,42 +52,47 @@ function withExtras(
   format: string,
 ): string {
   const p = new URLSearchParams(base);
-  // For ?scene=/?c= the scene already carries canvas.theme; a &theme= here
-  // OVERRIDES it (render resolveSceneTheme honors an explicit param) — that's
-  // exactly how the <picture> split serves the other mode from one config.
+  // For ?scene=/?c= the scene already carries canvas.theme; an explicit
+  // &theme= mirrors/overrides it (render resolveSceneTheme honors the
+  // param), and for the ?preset= Tier-0 path it's how the chosen theme
+  // reaches the build.
   p.set("theme", theme);
   if (format !== "svg") p.set("format", format);
   return `/api/render?${p.toString()}`;
 }
 
-// A single preview URL (same-origin relative) for the selected theme.
+// The chosen theme (6-swatch) is FIXED — it renders for EVERY viewer in
+// both color-scheme modes (design ruling: WYSIWYG; themed banners are
+// self-contained and read on any GitHub appearance). It lives on the
+// scene's canvas.theme; an explicit &theme= mirrors it so the ?preset=
+// Tier-0 path also honors it. (BUG A: previously the light/dark TOGGLE
+// name was passed as the theme, so ocean/ember/… never reached the URL.)
+function chosenTheme(state: ConfigState): string {
+  return state.scene.canvas.theme ?? "dark";
+}
+
+// A single preview URL (same-origin relative). Theme is the chosen palette,
+// independent of the preview's light/dark PAGE-background toggle.
 export async function previewUrl(
   state: ConfigState,
-  theme: string,
   format = "svg",
 ): Promise<string> {
   const { params } = await encodeConfigQuery(state);
-  return withExtras(params, theme, format);
+  return withExtras(params, chosenTheme(state), format);
 }
 
-// The copy-paste embed snippet: <a> wrapper + <picture> light/dark split.
-// Absolute URLs (origin) so it works pasted into any README.
+// The copy-paste embed snippet. Fixed-theme basic path → a single <img>
+// (the chosen theme for everyone), matching real flagship-README usage
+// (no <picture> split). An explicit "Adaptive" split is a deferred option.
 export async function embedSnippet(
   state: ConfigState,
   origin: string,
   linkHref: string,
 ): Promise<{ snippet: string; tier: string }> {
   const { params, tier } = await encodeConfigQuery(state);
-  const dark = origin + withExtras(params, "dark", "svg");
-  const light = origin + withExtras(params, "light", "svg");
+  const url = origin + withExtras(params, chosenTheme(state), "svg");
   const alt = `${state.presetName} — dynimage`;
   const snippet =
-    `<a href="${linkHref}">\n` +
-    `  <picture>\n` +
-    `    <source media="(prefers-color-scheme: dark)" srcset="${dark}">\n` +
-    `    <source media="(prefers-color-scheme: light)" srcset="${light}">\n` +
-    `    <img src="${dark}" alt="${alt}">\n` +
-    `  </picture>\n` +
-    `</a>`;
+    `<a href="${linkHref}">\n` + `  <img src="${url}" alt="${alt}">\n` + `</a>`;
   return { snippet, tier };
 }
