@@ -1,6 +1,7 @@
 import { allCards } from "@/lib/cards/registry-all";
 import { allElements } from "@/lib/scene/registry";
 import { metricMatrix } from "@/lib/scene/bind";
+import { allPresets } from "@/lib/scene/presets";
 import { z } from "zod";
 
 // Introspection endpoint — the editor (and anyone curious) calls this
@@ -55,8 +56,18 @@ export async function GET() {
     meta: el.meta,
   }));
 
+  // Preset catalog — named element+knob bundles the editor's preset rail
+  // offers as entry points. The full Scene is built server-side (subject
+  // baked into binds); here we surface only the editor-facing metadata.
+  const presets = allPresets().map((p) => ({
+    name: p.name,
+    title: p.title,
+    description: p.description,
+    subjectKinds: p.subjectKinds,
+  }));
+
   return Response.json(
-    { v: 1, cards, elements, metrics: metricMatrix() },
+    { v: 1, cards, elements, metrics: metricMatrix(), presets },
     {
       headers: {
         "Cache-Control":

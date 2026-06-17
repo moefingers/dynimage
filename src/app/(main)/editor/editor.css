@@ -1,0 +1,363 @@
+/* Editor B1 — plain CSS over the app's design tokens (globals.css vars).
+   3-zone layout: preset rail · live preview · control panel · output bar. */
+
+.editor {
+  display: grid;
+  grid-template-columns: 240px 1fr;
+  gap: 16px;
+  max-width: 1200px;
+  margin: 24px auto;
+  padding: 0 16px;
+  align-items: start;
+}
+
+/* ── Preset rail ── */
+.rail {
+  position: sticky;
+  top: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.rail-head {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin: 4px 2px;
+}
+.rail-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.preset {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+  padding: 10px 12px;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  background: var(--card);
+  color: var(--fg);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+.preset:hover {
+  border-color: var(--accent);
+}
+.preset.active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent) inset;
+}
+.preset-title {
+  font-weight: 600;
+  font-size: 14px;
+}
+.preset-desc {
+  font-size: 12px;
+  color: var(--muted);
+}
+
+/* ── Stage (preview + panel + output) ── */
+.stage {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  min-width: 0;
+}
+
+.preview-zone {
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  background: var(--card);
+  overflow: hidden;
+}
+.preview-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--stroke);
+}
+.preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  min-height: 200px;
+}
+.preview.dark {
+  background: #0a0a0a;
+  background-image: radial-gradient(circle at 50% 0%, #1a1a22, #0a0a0a);
+}
+.preview.light {
+  background: #fafafa;
+  background-image: radial-gradient(circle at 50% 0%, #ffffff, #ececf0);
+}
+.preview img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}
+.skeleton {
+  width: 100%;
+  height: 200px;
+  border-radius: 8px;
+  background: linear-gradient(
+    90deg,
+    var(--code-bg),
+    var(--stroke),
+    var(--code-bg)
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+}
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+  100% {
+    background-position: -200% 0;
+  }
+}
+.note {
+  padding: 8px 12px;
+  margin: 0;
+}
+
+/* ── Control panel ── */
+.panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.knob-group {
+  border: 1px solid var(--stroke);
+  border-radius: 12px;
+  padding: 12px 14px;
+  background: var(--card);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.knob-group legend,
+.knob-group .legend {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  padding: 0 4px;
+}
+.knob {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.knob-label {
+  font-size: 13px;
+  color: var(--fg);
+}
+.knob-text,
+.knob-select,
+.knob-num {
+  font: inherit;
+  font-size: 14px;
+  padding: 7px 9px;
+  border: 1px solid var(--stroke);
+  border-radius: 8px;
+  background: var(--bg);
+  color: var(--fg);
+}
+.mono {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 13px;
+}
+.knob-text:focus,
+.knob-select:focus,
+.knob-num:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -1px;
+}
+
+/* segmented */
+.knob-segmented,
+.seg-toggle {
+  display: inline-flex;
+  border: 1px solid var(--stroke);
+  border-radius: 8px;
+  overflow: hidden;
+  width: fit-content;
+}
+.seg {
+  font: inherit;
+  font-size: 13px;
+  padding: 6px 12px;
+  border: none;
+  background: var(--bg);
+  color: var(--muted);
+  cursor: pointer;
+}
+.seg + .seg {
+  border-left: 1px solid var(--stroke);
+}
+.seg.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* color */
+.knob-color {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.knob-color input[type="color"] {
+  width: 36px;
+  height: 32px;
+  padding: 0;
+  border: 1px solid var(--stroke);
+  border-radius: 8px;
+  background: none;
+  cursor: pointer;
+}
+.knob-color .knob-text {
+  flex: 1;
+}
+
+/* slider */
+.knob-slider {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+.knob-slider input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+.knob-num {
+  width: 84px;
+}
+
+/* toggle */
+.knob-toggle {
+  width: 42px;
+  height: 24px;
+  border-radius: 999px;
+  border: 1px solid var(--stroke);
+  background: var(--bg);
+  position: relative;
+  cursor: pointer;
+  padding: 0;
+}
+.knob-toggle .dot {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--muted);
+  transition:
+    transform 0.15s,
+    background 0.15s;
+}
+.knob-toggle.on {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.knob-toggle.on .dot {
+  transform: translateX(18px);
+  background: #fff;
+}
+
+/* theme swatches */
+.theme-swatches {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.swatch {
+  width: 34px;
+  height: 34px;
+  border-radius: 8px;
+  border: 2px solid;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+}
+.swatch.active {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.swatch-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+/* ── Output bar ── */
+.output {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+.btn {
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 9px 16px;
+  border: 1px solid var(--stroke);
+  border-radius: 9px;
+  background: var(--card);
+  color: var(--fg);
+  cursor: pointer;
+}
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.snippet {
+  margin: 0;
+  padding: 12px;
+  border: 1px solid var(--stroke);
+  border-radius: 10px;
+  background: var(--code-bg);
+  overflow-x: auto;
+  font-size: 12px;
+  white-space: pre;
+}
+
+.muted {
+  color: var(--muted);
+}
+.small {
+  font-size: 12px;
+}
+
+/* ── Responsive: stack below ~720px, rail becomes a scroller ── */
+@media (max-width: 720px) {
+  .editor {
+    grid-template-columns: 1fr;
+  }
+  .rail {
+    position: static;
+  }
+  .rail-list {
+    flex-direction: row;
+    overflow-x: auto;
+    padding-bottom: 4px;
+  }
+  .preset {
+    min-width: 180px;
+  }
+}
