@@ -33,3 +33,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# agent-bus runtime state — message logs + per-reader cursors. Local
+# coordination only; carries secrets-in-transit (e.g. PATs handed between
+# agents) in cleartext, so it must NEVER be committed.
+CONTEXT/active/bus/
