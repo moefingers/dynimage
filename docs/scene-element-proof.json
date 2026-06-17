@@ -1,0 +1,97 @@
+{
+  "v": 1,
+  "canvas": {
+    "w": 1100,
+    "h": 340,
+    "theme": "ocean"
+  },
+  "elements": [
+    {
+      "id": "bg",
+      "type": "frame",
+      "transform": {
+        "x": 0,
+        "y": 0,
+        "w": 1100,
+        "h": 340,
+        "z": 0
+      },
+      "knobs": {
+        "wash": true,
+        "radius": 18
+      }
+    },
+    {
+      "id": "orb",
+      "type": "frame",
+      "transform": {
+        "x": 40,
+        "y": 50,
+        "w": 240,
+        "h": 240,
+        "z": 1
+      },
+      "knobs": {
+        "wash": true,
+        "radius": 120,
+        "fill": "bg",
+        "stroke": "accent"
+      }
+    },
+    {
+      "id": "mark",
+      "type": "logo",
+      "anchor": {
+        "to": "orb",
+        "slot": "center"
+      },
+      "transform": {
+        "w": 130,
+        "h": 130,
+        "z": 3
+      },
+      "knobs": {
+        "icon": "github",
+        "fill": "accent",
+        "breathe": true
+      }
+    },
+    {
+      "id": "name",
+      "type": "text",
+      "transform": {
+        "x": 340,
+        "y": 36,
+        "w": 700,
+        "h": 40,
+        "z": 2
+      },
+      "knobs": {
+        "text": "@moefingers",
+        "size": 22,
+        "align": "left",
+        "color": "text"
+      }
+    },
+    {
+      "id": "headline",
+      "type": "stat",
+      "transform": {
+        "x": 340,
+        "y": 70,
+        "w": 700,
+        "h": 170,
+        "z": 2
+      },
+      "knobs": {
+        "label": "commits · last year",
+        "size": 120,
+        "mono": true
+      },
+      "bind": {
+        "provider": "literal",
+        "value": "2,773"
+      }
+    }
+  ]
+}
