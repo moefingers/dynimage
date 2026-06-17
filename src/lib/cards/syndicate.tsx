@@ -234,7 +234,7 @@ export const syndicateCard: Card<Input, Data> = {
   meta: {
     title: "Recanon — services CTA",
     description:
-      "Branded CTA built around the brand sacred-geometry lattice from recanon.com. Two counter-rotating layers of the intersecting-circles pattern with a slow hue-rotate, brand teal stroke, masked to keep the title legible. Four service tiles overlay. Optional focus= dims non-target tiles.",
+      "Branded CTA built around the brand sacred-geometry lattice from recanon.com. Two counter-rotating layers of the intersecting-circles pattern with a slow hue-rotate, brand teal stroke, masked to keep the title legible. Three service tiles overlay. Optional focus= dims non-target tiles.",
     dimensions: ["user"],
     supportsAnimation: true,
   },
