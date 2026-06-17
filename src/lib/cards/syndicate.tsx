@@ -11,8 +11,8 @@ import {
 const DEFAULT_W = 900;
 const DEFAULT_H = 320;
 
-// Infinite-Syndicate CTA. Centered around the brand sacred-geometry
-// lattice from infinite-syndicate.com/public/radial1.svg — two
+// Recanon CTA. Centered around the brand sacred-geometry
+// lattice from infinite-syndicate.com/public/radial1.svg (now Recanon) — two
 // counter-rotating layers of intersecting circles, with the brand teal
 // stroke and a slow hue-rotate for depth. Tiles overlay the lattice;
 // the title sits centered between the lattice center and the top edge.
@@ -113,7 +113,7 @@ const renderSvg: CardRenderer<Data> = async ({
 
   return {
     contentType: "image/svg+xml; charset=utf-8",
-    body: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(`Infinite Syndicate — services CTA for ${data.user}`)}">
+    body: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(`Recanon — services CTA for ${data.user}`)}">
   <defs>
     <radialGradient id="sLatticeGrad" cx="50%" cy="50%" r="50%">
       <stop offset="16%" stop-color="${SYNDICATE_TEAL}" stop-opacity="0"/>
@@ -213,11 +213,11 @@ const renderSvg: CardRenderer<Data> = async ({
   </g>
 
   <text class="tag"   x="${width / 2}" y="42" text-anchor="middle">A SUITE OF SERVICES · BROUGHT TOGETHER</text>
-  <text class="brand" x="${width / 2}" y="92" text-anchor="middle">Infinite Syndicate</text>
+  <text class="brand" x="${width / 2}" y="92" text-anchor="middle">Recanon</text>
 
   ${tileEls}
 
-  <text class="tag" x="${width - PAD}" y="${height - 8}" text-anchor="end" opacity="0.6">infinite-syndicate.com · @${esc(data.user)}</text>
+  <text class="tag" x="${width - PAD}" y="${height - 8}" text-anchor="end" opacity="0.6">recanon.com · @${esc(data.user)}</text>
 </svg>`,
   };
 };
@@ -232,9 +232,9 @@ export const syndicateCard: Card<Input, Data> = {
     svg: renderSvg,
   },
   meta: {
-    title: "Infinite Syndicate — services CTA",
+    title: "Recanon — services CTA",
     description:
-      "Branded CTA built around the brand sacred-geometry lattice from infinite-syndicate.com. Two counter-rotating layers of the intersecting-circles pattern with a slow hue-rotate, brand teal stroke, masked to keep the title legible. Four service tiles overlay. Optional focus= dims non-target tiles.",
+      "Branded CTA built around the brand sacred-geometry lattice from recanon.com. Two counter-rotating layers of the intersecting-circles pattern with a slow hue-rotate, brand teal stroke, masked to keep the title legible. Four service tiles overlay. Optional focus= dims non-target tiles.",
     dimensions: ["user"],
     supportsAnimation: true,
   },
