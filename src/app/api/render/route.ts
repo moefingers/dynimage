@@ -1,30 +1,41 @@
 import { gunzipSync } from "node:zlib";
 import { LayoutSpec } from "@/lib/cards/spec";
 import { renderCompound } from "@/lib/cards/compound";
+import { Scene } from "@/lib/scene/scene-spec";
+import { renderScene } from "@/lib/scene/render";
 import { etagOf } from "@/lib/cards/etag";
 import type { CardFormat } from "@/lib/cards/types";
 
-// Compound-rendering endpoint. Two transports onto the same dispatcher:
+// Render endpoint. Two config shapes, three transports, one Node runtime
+// (Skia/sharp compositing is Node-only):
 //
-//   GET /api/render?spec=<base64-of-JSON>&format=png
-//     → camo-friendly, the URL IS the spec, fully cacheable.
-//     Optional &z=1 indicates the spec is gzipped before base64.
+//   Scene (scene/element model — §1/§2):
+//     GET  /api/render?scene=<base64url-of-JSON>&format=png  (&z=1 gzip)
+//     POST /api/render?format=png   Body: { v:1, canvas, elements }
+//   LayoutSpec (legacy compound — retained during transition):
+//     GET  /api/render?spec=<base64-of-JSON>&format=png      (&z=1 gzip)
+//     POST /api/render?format=png   Body: { v:1, w, h, cards }
 //
-//   POST /api/render?format=png
-//     Body: { ...LayoutSpec... }
-//     → server-to-server, used by callers like unlv-museum's sync
-//       script that POST a spec and save the resulting bytes locally.
-//
-// Both paths share the same compound renderer. Runs on Node because
-// compound's PNG/WebP/AVIF compositing uses sharp.
+// GET picks the path by which param is present; POST sniffs the body
+// shape (`elements` ⇒ Scene, `cards` ⇒ LayoutSpec). The Tier-2 codec
+// (builder-2, ?c=) will decode to a Scene and call the same renderScene.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const VALID_FORMATS = new Set<CardFormat>(["svg", "png", "webp", "avif"]);
 
+function decodeParam(param: string, gzipped: boolean): unknown {
+  const raw = decodeBase64Url(param);
+  const text = gzipped
+    ? new TextDecoder().decode(gunzipSync(raw))
+    : new TextDecoder().decode(raw);
+  return JSON.parse(text);
+}
+
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const format = url.searchParams.get("format") ?? "svg";
+  const sceneParam = url.searchParams.get("scene");
   const specParam = url.searchParams.get("spec");
   const gzipped = url.searchParams.get("z") === "1";
 
@@ -34,26 +45,33 @@ export async function GET(request: Request): Promise<Response> {
       { status: 400 },
     );
   }
-  if (!specParam) {
+  if (!sceneParam && !specParam) {
     return new Response(
-      "Missing required ?spec=<base64> parameter. Pass a LayoutSpec encoded as base64-JSON (or base64-gzipped-JSON with &z=1).",
+      "Missing config. Pass ?scene=<base64url(JSON)> (scene/element model) or ?spec=<base64(JSON)> (legacy compound); add &z=1 if gzipped.",
       { status: 400 },
     );
   }
 
+  if (sceneParam) {
+    let sceneJson: unknown;
+    try {
+      sceneJson = decodeParam(sceneParam, gzipped);
+    } catch (e) {
+      return new Response(`Failed to decode scene: ${errMessage(e)}`, {
+        status: 400,
+      });
+    }
+    return renderSceneAndRespond(sceneJson, format as CardFormat, request, url);
+  }
+
   let specJson: unknown;
   try {
-    const raw = decodeBase64Url(specParam);
-    const text = gzipped
-      ? new TextDecoder().decode(gunzipSync(raw))
-      : new TextDecoder().decode(raw);
-    specJson = JSON.parse(text);
+    specJson = decodeParam(specParam!, gzipped);
   } catch (e) {
     return new Response(`Failed to decode spec: ${errMessage(e)}`, {
       status: 400,
     });
   }
-
   return renderAndRespond(specJson, format as CardFormat, request, url);
 }
 
@@ -77,7 +95,67 @@ export async function POST(request: Request): Promise<Response> {
     });
   }
 
+  // Sniff the config shape: a Scene has `elements`; a LayoutSpec has `cards`.
+  if (body && typeof body === "object" && "elements" in body) {
+    return renderSceneAndRespond(body, format as CardFormat, request, url);
+  }
   return renderAndRespond(body, format as CardFormat, request, url);
+}
+
+async function renderSceneAndRespond(
+  rawScene: unknown,
+  format: CardFormat,
+  request: Request,
+  url: URL,
+): Promise<Response> {
+  const parsed = Scene.safeParse(rawScene);
+  if (!parsed.success) {
+    return new Response(`Invalid Scene: ${parsed.error.message}`, {
+      status: 400,
+    });
+  }
+
+  let rendered;
+  try {
+    rendered = await renderScene(
+      parsed.data,
+      format,
+      `${url.protocol}//${url.host}`,
+      url.searchParams,
+    );
+  } catch (e) {
+    return new Response(`Render failed: ${errMessage(e)}`, { status: 500 });
+  }
+
+  const etag = await etagOf(rendered.body);
+  const ifNoneMatch = request.headers.get("if-none-match");
+  if (ifNoneMatch && ifNoneMatch === etag) {
+    return new Response(null, {
+      status: 304,
+      headers: {
+        ETag: etag,
+        "Cache-Control":
+          "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
+      },
+    });
+  }
+
+  const body =
+    typeof rendered.body === "string"
+      ? rendered.body
+      : (rendered.body as BodyInit);
+
+  return new Response(body, {
+    headers: {
+      "Content-Type": rendered.contentType,
+      "Cache-Control":
+        "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
+      ETag: etag,
+      "X-Card": "scene",
+      "X-Runtime": "nodejs",
+      "X-Scene-Elements": String(parsed.data.elements.length),
+    },
+  });
 }
 
 async function renderAndRespond(
