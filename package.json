@@ -36,11 +36,5 @@
       "eslint --fix"
     ],
     "*.{json,css,md}": "prettier --write"
-  },
-  "pnpm": {
-    "onlyBuiltDependencies": [
-      "@napi-rs/canvas",
-      "sharp"
-    ]
   }
 }
