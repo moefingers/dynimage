@@ -5,7 +5,9 @@ import {
   decodeConfig,
   encodeToQuery,
   decodeFromQuery,
+  inflateCapped,
   base64urlEncode,
+  base64urlDecode,
   CodecError,
   CODEC_VERSION,
   GZIP_THRESHOLD,
@@ -197,4 +199,38 @@ test("rejects an oversized non-gzipped payload too", async () => {
     name: "CodecError",
     message: /cap/,
   });
+});
+
+// --- inflateCapped: the single-sourced cap that /api/render delegates to -
+
+test("inflateCapped aborts a gzip bomb mid-stream (route-level cap control)", async () => {
+  // Mirrors exactly what /api/render's ?spec=&z=1 path now runs: decode
+  // bytes → inflateCapped. A tiny gzip that inflates past the ceiling
+  // must throw before any unbounded allocation.
+  const { c, z } = await encodeConfig({ s: "a".repeat(MAX_DECODED_BYTES * 4) });
+  assert.equal(z, 1);
+  const gzBytes = base64urlDecode(c);
+  assert.ok(gzBytes.length < 5000, "bomb is tiny on the wire");
+  await assert.rejects(() => inflateCapped(gzBytes, true), {
+    name: "CodecError",
+    message: /exceeds .* cap|decompression bomb/,
+  });
+});
+
+test("inflateCapped rejects an oversized raw payload", async () => {
+  await assert.rejects(
+    () => inflateCapped(new Uint8Array(MAX_DECODED_BYTES + 1), false),
+    { name: "CodecError", message: /cap/ },
+  );
+});
+
+test("inflateCapped passes through within-cap raw and gzip payloads", async () => {
+  const raw = enc("hello");
+  assert.deepEqual(await inflateCapped(raw, false), raw);
+
+  const { c, z } = await encodeConfig({ s: "x".repeat(GZIP_THRESHOLD + 100) });
+  assert.equal(z, 1);
+  const out = await inflateCapped(base64urlDecode(c), true);
+  const parsed = JSON.parse(new TextDecoder().decode(out));
+  assert.equal(parsed.v, CODEC_VERSION);
 });

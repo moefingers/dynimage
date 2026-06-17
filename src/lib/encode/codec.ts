@@ -107,15 +107,7 @@ export async function decodeConfig<T = unknown>(
     throw new CodecError(`malformed base64url in c=: ${msg(e)}`);
   }
 
-  let bytes: Uint8Array;
-  if (gzipped) {
-    bytes = await gunzipCapped(payload, MAX_DECODED_BYTES);
-  } else {
-    if (payload.length > MAX_DECODED_BYTES) {
-      throw new CodecError(`payload exceeds ${MAX_DECODED_BYTES}-byte cap`);
-    }
-    bytes = payload;
-  }
+  const bytes = await inflateCapped(payload, gzipped, MAX_DECODED_BYTES);
 
   let obj: unknown;
   try {
@@ -155,6 +147,33 @@ export async function decodeFromQuery<T = unknown>(
   const c = params.get("c");
   if (!c) throw new CodecError("missing required c= parameter");
   return decodeConfig<T>(c, params.get("z") ?? 0);
+}
+
+/**
+ * Decode raw bytes that may be gzipped, enforcing the decompression cap.
+ *
+ * This is the **single source of the decompression-bomb ceiling**. Both
+ * this module's {@link decodeConfig} and the legacy `?spec=` transport in
+ * `/api/render` route through here, so the cap lives in exactly one place:
+ *
+ *   - gzipped: inflate through the streaming gunzip, aborting the moment
+ *     the running total crosses `maxBytes` (bounded allocation — the bomb
+ *     never fully materializes).
+ *   - raw: reject up front if the decoded bytes already exceed the cap.
+ *
+ * Throws {@link CodecError} on an oversized payload or a non-gzip stream
+ * flagged gzipped — callers map that to a clean 400.
+ */
+export async function inflateCapped(
+  bytes: Uint8Array,
+  gzipped: boolean,
+  maxBytes: number = MAX_DECODED_BYTES,
+): Promise<Uint8Array> {
+  if (gzipped) return gunzipCapped(bytes, maxBytes);
+  if (bytes.length > maxBytes) {
+    throw new CodecError(`payload exceeds ${maxBytes}-byte cap`);
+  }
+  return bytes;
 }
 
 // ---------------------------------------------------------------------------
