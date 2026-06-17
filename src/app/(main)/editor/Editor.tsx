@@ -139,19 +139,24 @@ export function Editor() {
   }, [presetName, subject, rebuild]);
 
   // Debounced live preview (~250ms) — re-render via the shortest encoding.
-  // All setState happens inside the timer callback (deferred), not in the
-  // effect body, so it can't cascade-render.
+  // The light/dark toggle (variant) only changes the preview PAGE background
+  // (design ruling: fixed theme), so it is NOT a render dependency. All
+  // setState is deferred (in the timer) so it can't cascade-render.
   useEffect(() => {
     if (!configState) return;
     const t = setTimeout(async () => {
       setPreviewing(true);
-      // Compute the URL; the probe <img> reports load/error (where a bad
-      // handle / upstream 500 surfaces) and flips previewing off there.
-      const u = await previewUrl(configState, variant, "svg");
-      setPendingSrc(u);
+      // Probe <img> reports load/error (a bad handle / upstream 500) and
+      // flips previewing off there. If the URL is unchanged the probe won't
+      // reload — clear the spinner here so it can never stick.
+      const u = await previewUrl(configState, "svg");
+      setPendingSrc((prev) => {
+        if (prev === u) setPreviewing(false);
+        return u;
+      });
     }, 250);
     return () => clearTimeout(t);
-  }, [configState, variant]);
+  }, [configState]);
 
   const onKnobChange = useCallback(
     (elementId: string, key: string, value: unknown) => {
