@@ -81,7 +81,7 @@ function buildCommitsOrbit(params: PresetParams): Scene {
         type: "stat",
         transform: { x: 340, y: 78, w: 720, h: 150, z: 2 },
         knobs: {
-          label: "commits · last year",
+          label: "contributions · last year",
           size: 120,
           mono: true,
           color: "#22d3ee",
@@ -93,7 +93,7 @@ function buildCommitsOrbit(params: PresetParams): Scene {
         type: "stat",
         transform: { x: 340, y: 250, w: 720, h: 40, z: 2 },
         knobs: {
-          label: "all-time commits",
+          label: "all-time contributions",
           size: 26,
           mono: true,
           color: "muted",
