@@ -4,6 +4,9 @@ import { renderCompound } from "@/lib/cards/compound";
 import { Scene } from "@/lib/scene/scene-spec";
 import { renderScene } from "@/lib/scene/render";
 import { etagOf } from "@/lib/cards/etag";
+import { l1ReadThrough, l1Key, stableStringify } from "@/lib/data/l1cache";
+import { meterRender } from "@/lib/data/usage";
+import { redisConfigured } from "@/lib/data/redis";
 import type { CardFormat } from "@/lib/cards/types";
 
 // Render endpoint. Two config shapes, three transports, one Node runtime
@@ -27,6 +30,94 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const VALID_FORMATS = new Set<CardFormat>(["svg", "png", "webp", "avif"]);
+
+const CACHE_CONTROL =
+  "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400";
+
+// L1 freshness (spec §6: L1 TTL ≤ min L2 TTL of the config's binds). v1
+// uses the L2 per-metric FLOOR (userContributions/streak = 15m, see
+// data/atoms-seam.ts) as the ceiling for any data-dependent config; a
+// config that touches no upstream data can cache far longer. Exact
+// per-bind TTL is a later optimization.
+const L1_TTL_DATA = 15 * 60_000;
+const L1_TTL_STATIC = 6 * 60 * 60_000;
+
+// Query params that select the config/transport rather than the
+// PRESENTATION — excluded from the L1 key (config is hashed separately,
+// format is its own key part). Everything else (theme, bg, accent, ?v=…)
+// changes the rendered bytes, so it folds into the key.
+const TRANSPORT_PARAMS = new Set(["c", "scene", "spec", "z", "format"]);
+
+function presentationKey(url: URL): string {
+  const entries = [...url.searchParams.entries()]
+    .filter(([k]) => !TRANSPORT_PARAMS.has(k))
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+  return new URLSearchParams(entries).toString();
+}
+
+// A scene depends on upstream data only if some element binds to a real
+// provider; a `literal` bind carries its value inline (no fetch).
+function sceneIsDataDependent(scene: Scene): boolean {
+  return scene.elements.some(
+    (el) => el.bind != null && el.bind.provider !== "literal",
+  );
+}
+
+// Shared L1 read-through + response. A cache hit returns stored bytes with
+// NO render and NO render-meter tick; a miss renders, caches, and meters.
+// Degrades to a direct render when Upstash is unconfigured (X-L1: bypass).
+async function respondWithL1(args: {
+  keyParts: readonly string[];
+  ttlMs: number;
+  request: Request;
+  doRender: () => Promise<{ body: string | Uint8Array; contentType: string }>;
+  headers: Record<string, string>;
+}): Promise<Response> {
+  let result;
+  try {
+    result = await l1ReadThrough(
+      await l1Key(args.keyParts),
+      args.ttlMs,
+      async () => {
+        const rendered = await args.doRender();
+        return {
+          body: rendered.body,
+          contentType: rendered.contentType,
+          etag: await etagOf(rendered.body),
+        };
+      },
+    );
+  } catch (e) {
+    return new Response(`Render failed: ${errMessage(e)}`, { status: 500 });
+  }
+
+  const { render: out, hit } = result;
+  if (!hit && redisConfigured()) {
+    // Meter the compute (abuse meter). Anonymous for now — owner
+    // attribution arrives with the auth wiring (sequenced after this lane).
+    await meterRender({ ownerId: null }).catch(() => {});
+  }
+  const xL1 = redisConfigured() ? (hit ? "hit" : "miss") : "bypass";
+
+  const ifNoneMatch = args.request.headers.get("if-none-match");
+  if (ifNoneMatch && ifNoneMatch === out.etag) {
+    return new Response(null, {
+      status: 304,
+      headers: { ETag: out.etag, "Cache-Control": CACHE_CONTROL, "X-L1": xL1 },
+    });
+  }
+
+  const body = typeof out.body === "string" ? out.body : (out.body as BodyInit);
+  return new Response(body, {
+    headers: {
+      "Content-Type": out.contentType,
+      "Cache-Control": CACHE_CONTROL,
+      ETag: out.etag,
+      "X-L1": xL1,
+      ...args.headers,
+    },
+  });
+}
 
 // Single decode path for BOTH transports (?scene= and ?spec=). The
 // inflate is size-capped BEFORE JSON.parse: `inflateCapped` aborts a gzip
@@ -139,45 +230,22 @@ async function renderSceneAndRespond(
     });
   }
 
-  let rendered;
-  try {
-    rendered = await renderScene(
-      parsed.data,
-      format,
-      `${url.protocol}//${url.host}`,
-      url.searchParams,
-    );
-  } catch (e) {
-    return new Response(`Render failed: ${errMessage(e)}`, { status: 500 });
-  }
-
-  const etag = await etagOf(rendered.body);
-  const ifNoneMatch = request.headers.get("if-none-match");
-  if (ifNoneMatch && ifNoneMatch === etag) {
-    return new Response(null, {
-      status: 304,
-      headers: {
-        ETag: etag,
-        "Cache-Control":
-          "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
-      },
-    });
-  }
-
-  const body =
-    typeof rendered.body === "string"
-      ? rendered.body
-      : (rendered.body as BodyInit);
-
-  return new Response(body, {
+  const scene = parsed.data;
+  return respondWithL1({
+    keyParts: ["scene", format, stableStringify(scene), presentationKey(url)],
+    ttlMs: sceneIsDataDependent(scene) ? L1_TTL_DATA : L1_TTL_STATIC,
+    request,
+    doRender: () =>
+      renderScene(
+        scene,
+        format,
+        `${url.protocol}//${url.host}`,
+        url.searchParams,
+      ),
     headers: {
-      "Content-Type": rendered.contentType,
-      "Cache-Control":
-        "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
-      ETag: etag,
       "X-Card": "scene",
       "X-Runtime": "nodejs",
-      "X-Scene-Elements": String(parsed.data.elements.length),
+      "X-Scene-Elements": String(scene.elements.length),
     },
   });
 }
@@ -195,45 +263,24 @@ async function renderAndRespond(
     });
   }
 
-  let rendered;
-  try {
-    rendered = await renderCompound(
-      parsed.data,
-      format,
-      `${url.protocol}//${url.host}`,
-      url.searchParams,
-    );
-  } catch (e) {
-    return new Response(`Render failed: ${errMessage(e)}`, { status: 500 });
-  }
-
-  const etag = await etagOf(rendered.body);
-  const ifNoneMatch = request.headers.get("if-none-match");
-  if (ifNoneMatch && ifNoneMatch === etag) {
-    return new Response(null, {
-      status: 304,
-      headers: {
-        ETag: etag,
-        "Cache-Control":
-          "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
-      },
-    });
-  }
-
-  const body =
-    typeof rendered.body === "string"
-      ? rendered.body
-      : (rendered.body as BodyInit);
-
-  return new Response(body, {
+  const spec = parsed.data;
+  return respondWithL1({
+    keyParts: ["compound", format, stableStringify(spec), presentationKey(url)],
+    // Legacy compound cards fetch upstream via their own resolvers; without
+    // per-card data introspection, cap L1 at the L2 data floor.
+    ttlMs: L1_TTL_DATA,
+    request,
+    doRender: () =>
+      renderCompound(
+        spec,
+        format,
+        `${url.protocol}//${url.host}`,
+        url.searchParams,
+      ),
     headers: {
-      "Content-Type": rendered.contentType,
-      "Cache-Control":
-        "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
-      ETag: etag,
       "X-Card": "compound",
       "X-Runtime": "nodejs",
-      "X-Compound-Cards": String(parsed.data.cards.length),
+      "X-Compound-Cards": String(spec.cards.length),
     },
   });
 }
