@@ -3,16 +3,18 @@ import { LayoutSpec } from "@/lib/cards/spec";
 import { renderCompound } from "@/lib/cards/compound";
 import { Scene } from "@/lib/scene/scene-spec";
 import { renderScene } from "@/lib/scene/render";
+import { getPreset } from "@/lib/scene/presets";
 import { etagOf } from "@/lib/cards/etag";
 import { l1ReadThrough, l1Key, stableStringify } from "@/lib/data/l1cache";
 import { meterRender } from "@/lib/data/usage";
 import { redisConfigured } from "@/lib/data/redis";
 import type { CardFormat } from "@/lib/cards/types";
 
-// Render endpoint. Two config shapes, three transports, one Node runtime
+// Render endpoint. Two config shapes, four transports, one Node runtime
 // (Skia/sharp compositing is Node-only):
 //
 //   Scene (scene/element model — §1/§2):
+//     GET  /api/render?preset=<name>&user=<id>&format=png    (Tier-0)
 //     GET  /api/render?scene=<base64url-of-JSON>&format=png  (&z=1 gzip)
 //     GET  /api/render?c=<base64url(gzip(json))>&z=1         (Tier-2 blob)
 //     POST /api/render?format=png   Body: { v:1, canvas, elements }
@@ -21,11 +23,14 @@ import type { CardFormat } from "@/lib/cards/types";
 //     POST /api/render?format=png   Body: { v:1, w, h, cards }
 //
 // GET picks the path by which param is present; POST sniffs the body
-// shape (`elements` ⇒ Scene, `cards` ⇒ LayoutSpec). ?c= is the Tier-2
-// compressed sibling of ?scene= (spec §2): the codec unwraps its v:1
-// envelope to a Scene config, then it joins the identical renderScene
-// path. The cap that protects ?scene=/?spec= lives inside the codec too,
-// so ?c= inherits the same decompression-bomb ceiling.
+// shape (`elements` ⇒ Scene, `cards` ⇒ LayoutSpec). All three Scene GET
+// transports converge on the SAME respondWithL1/renderScene path, so they
+// share L1 caching, the ETag/304, and (for ?scene=/?c=) the codec's
+// decompression cap:
+//   - ?preset= is Tier-0 — a named preset bundle built around ?user=,
+//     the literal DoD embed (e.g. preset=commits-orbit&user=moefingers).
+//   - ?c= is the Tier-2 compressed sibling of ?scene= (spec §2): the codec
+//     unwraps its v:1 envelope to a Scene, inheriting the bomb ceiling.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -134,6 +139,7 @@ async function decodeParam(param: string, gzipped: boolean): Promise<unknown> {
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const format = url.searchParams.get("format") ?? "svg";
+  const presetParam = url.searchParams.get("preset");
   const cParam = url.searchParams.get("c");
   const sceneParam = url.searchParams.get("scene");
   const specParam = url.searchParams.get("spec");
@@ -145,11 +151,37 @@ export async function GET(request: Request): Promise<Response> {
       { status: 400 },
     );
   }
-  if (!cParam && !sceneParam && !specParam) {
+  if (!presetParam && !cParam && !sceneParam && !specParam) {
     return new Response(
-      "Missing config. Pass ?c=<base64url(gzip(json))> (Tier-2 blob) or ?scene=<base64url(JSON)> (scene/element model) or ?spec=<base64(JSON)> (legacy compound); add &z=1 if gzipped.",
+      "Missing config. Pass ?preset=<name>&user=<id> (Tier-0), ?c=<base64url(gzip(json))> (Tier-2 blob), ?scene=<base64url(JSON)> (scene/element model), or ?spec=<base64(JSON)> (legacy compound); add &z=1 if gzipped.",
       { status: 400 },
     );
+  }
+
+  // ?preset= — Tier-0. A named preset bundle built around a subject. The
+  // preset's build() returns a Scene, which then takes the exact same
+  // respondWithL1/renderScene path as ?scene= (inheriting L1 + etag).
+  if (presetParam) {
+    const user = url.searchParams.get("user");
+    if (!user) {
+      return new Response(
+        `?preset=${presetParam} requires ?user=<id> (the subject to render).`,
+        { status: 400 },
+      );
+    }
+    const preset = getPreset(presetParam);
+    if (!preset) {
+      return new Response(`Unknown preset "${presetParam}".`, { status: 404 });
+    }
+    if (!preset.subjectKinds.includes("user")) {
+      return new Response(
+        `Preset "${presetParam}" does not accept a user subject (accepts: ${preset.subjectKinds.join(", ")}).`,
+        { status: 400 },
+      );
+    }
+    const theme = url.searchParams.get("theme") ?? undefined;
+    const scene = preset.build({ subject: { kind: "user", id: user }, theme });
+    return renderSceneAndRespond(scene, format as CardFormat, request, url);
   }
 
   // ?c= — Tier-2 compressed blob. The codec unwraps its v:1 envelope (and
