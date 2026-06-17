@@ -67,10 +67,27 @@ upstream 500), i.e. environmental, not a pipeline break.
 | typing        | `/api/<u>/typing.svg`               | 502             | data-resolve (nitrotype 500) |
 | typing-orbit  | `/api/<u>/typing-orbit.svg`         | 502             | data-resolve (nitrotype 500) |
 
-**Coverage note:** 5/15 render fully here (incl. `bar`+`metric`, two of the
-three Stab #5-touched cards). The other 10 reach the data layer and 502
-ONLY on upstream — they are byte-identical to pre-branch except they don't
-import the deleted dead `responsiveThemeStyle()`; the third touched card
-(`commits`) is a localized constant single-source. **Data-backed visual
-confirmation of the 10 upstream cards needs a `GITHUB_TOKEN` + Nitrotype
-access** — flagged for scout's preview/prod QA pass.
+**Coverage note:** 5/15 render with NO credentials; the other 10 reach the
+data layer and 502 ONLY on upstream — never in route/dispatch/render.
+
+### 4b. Data-backed enumeration (with live `GITHUB_TOKEN`, user `moefingers`)
+
+Re-run with `.env.local` (real token) loaded — **13/15 render 200 with live
+data**: commits, streak, portrait, text, metric, bar, orbit, syndicate,
+hero, strip, prism, nucleus, commits-orbit. The only two non-200 are
+`typing` / `typing-orbit`, which 502 because **`moefingers` has no
+Nitrotype account** (upstream nitrotype-api returns 500). Pointed at a
+valid Nitrotype handle (`bigmoemoney`, `travis`, …) **both render 200** —
+so **all 15 cards render at unchanged URLs**; the typing pair just needs a
+subject that exists on Nitrotype.
+
+### 4c. Flagship presets rendered from LIVE data (`real/`)
+
+Proof the element/preset path produces the banners from real upstream data
+(not just the literal `sample` path):
+
+- `real/preset-commits-orbit-LIVE.png` — `moefingers` live GitHub: 6,011 commits last year · 7,159 all-time.
+- `real/preset-typing-orbit-LIVE.png` — `bigmoemoney` live Nitrotype: 150 WPM avg · 175 best.
+
+Both fetch through the `github:*` / `nitrotype:*` binds (the existing atoms);
+the syndicate preset has no binds (static, already shown).
