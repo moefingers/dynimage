@@ -1,4 +1,4 @@
-import { inflateCapped } from "@/lib/encode/codec";
+import { inflateCapped, decodeConfig } from "@/lib/encode/codec";
 import { LayoutSpec } from "@/lib/cards/spec";
 import { renderCompound } from "@/lib/cards/compound";
 import { Scene } from "@/lib/scene/scene-spec";
@@ -11,14 +11,18 @@ import type { CardFormat } from "@/lib/cards/types";
 //
 //   Scene (scene/element model — §1/§2):
 //     GET  /api/render?scene=<base64url-of-JSON>&format=png  (&z=1 gzip)
+//     GET  /api/render?c=<base64url(gzip(json))>&z=1         (Tier-2 blob)
 //     POST /api/render?format=png   Body: { v:1, canvas, elements }
 //   LayoutSpec (legacy compound — retained during transition):
 //     GET  /api/render?spec=<base64-of-JSON>&format=png      (&z=1 gzip)
 //     POST /api/render?format=png   Body: { v:1, w, h, cards }
 //
 // GET picks the path by which param is present; POST sniffs the body
-// shape (`elements` ⇒ Scene, `cards` ⇒ LayoutSpec). The Tier-2 codec
-// (builder-2, ?c=) will decode to a Scene and call the same renderScene.
+// shape (`elements` ⇒ Scene, `cards` ⇒ LayoutSpec). ?c= is the Tier-2
+// compressed sibling of ?scene= (spec §2): the codec unwraps its v:1
+// envelope to a Scene config, then it joins the identical renderScene
+// path. The cap that protects ?scene=/?spec= lives inside the codec too,
+// so ?c= inherits the same decompression-bomb ceiling.
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -39,6 +43,7 @@ async function decodeParam(param: string, gzipped: boolean): Promise<unknown> {
 export async function GET(request: Request): Promise<Response> {
   const url = new URL(request.url);
   const format = url.searchParams.get("format") ?? "svg";
+  const cParam = url.searchParams.get("c");
   const sceneParam = url.searchParams.get("scene");
   const specParam = url.searchParams.get("spec");
   const gzipped = url.searchParams.get("z") === "1";
@@ -49,11 +54,26 @@ export async function GET(request: Request): Promise<Response> {
       { status: 400 },
     );
   }
-  if (!sceneParam && !specParam) {
+  if (!cParam && !sceneParam && !specParam) {
     return new Response(
-      "Missing config. Pass ?scene=<base64url(JSON)> (scene/element model) or ?spec=<base64(JSON)> (legacy compound); add &z=1 if gzipped.",
+      "Missing config. Pass ?c=<base64url(gzip(json))> (Tier-2 blob) or ?scene=<base64url(JSON)> (scene/element model) or ?spec=<base64(JSON)> (legacy compound); add &z=1 if gzipped.",
       { status: 400 },
     );
+  }
+
+  // ?c= — Tier-2 compressed blob. The codec unwraps its v:1 envelope (and
+  // enforces the decompression cap) to a Scene config, which then takes the
+  // exact same path as the raw ?scene= transport.
+  if (cParam) {
+    let sceneJson: unknown;
+    try {
+      sceneJson = await decodeConfig(cParam, gzipped);
+    } catch (e) {
+      return new Response(`Failed to decode c= blob: ${errMessage(e)}`, {
+        status: 400,
+      });
+    }
+    return renderSceneAndRespond(sceneJson, format as CardFormat, request, url);
   }
 
   if (sceneParam) {
