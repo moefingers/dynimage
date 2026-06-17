@@ -47,6 +47,10 @@ export const githubAtoms = {
     metric: "user-contributions",
     ttlMs: 15 * MIN,
     subjectOf: (p) => p.login,
+    // contributionsCollection includes the owner's PRIVATE contributions on
+    // their own token (totalCommitsLastYear via restrictedContributionsCount;
+    // streaks/total via the private-inclusive calendar). Vantage-sensitive.
+    vantageSensitive: true,
     fetch: (p, token) =>
       fetchUserContributions(
         p.login,
@@ -58,6 +62,9 @@ export const githubAtoms = {
     metric: "user-lifetime",
     ttlMs: 6 * 60 * MIN,
     subjectOf: (p) => p.login,
+    // Aggregates contributionsCollection across years → also private-inclusive
+    // on the owner's token. Vantage-sensitive.
+    vantageSensitive: true,
     fetch: (p, token) =>
       fetchUserLifetime(p.login, gh({ token: token.token, cached: false })),
   }),

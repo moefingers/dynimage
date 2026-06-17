@@ -1,23 +1,25 @@
 import { z } from "zod";
-import type { DedupeCache } from "@/lib/data/cache";
-import {
-  userOverview,
-  userContributions,
-  userLifetime,
-} from "@/lib/data/atoms";
-import { nitrotypeRacer } from "@/lib/data/nitrotype";
+import type { RenderContext } from "@/lib/data/seam";
+import { githubAtoms, nitrotypeAtoms } from "@/lib/data/atoms-seam";
 import { fmtInt } from "@/lib/cards/svg-helpers";
 import { SubjectSchema } from "./subject";
+import type { Scene } from "./scene-spec";
 import type { Bind, BoundValue, MetricDef, Subject } from "./types";
 
 // ─────────────────────────────────────────────────────────────────────
 // Bind layer — the seam between elements and data.
 //
-// This file is a THIN adapter over the EXISTING data atoms
-// (data/atoms.ts, data/nitrotype.ts — deputy's atom-seam). It NEVER
-// fetches directly; each MetricDef.resolve calls an atom and projects out
-// the one field it needs. Adding a metric = one MetricDef entry here; if a
-// metric needs a brand-new atom, that's deputy's lane (flag the lead).
+// This file is a THIN adapter over the SEAM atoms (data/atoms-seam.ts —
+// token-aware, L2-cached, metered). It NEVER fetches directly; each
+// MetricDef.resolve calls a seam atom with the RenderContext (owner +
+// per-render L1 + waitUntil) and projects out the one field it needs.
+// Adding a metric = one MetricDef entry here; a brand-new atom is deputy's
+// lane (flag the lead).
+//
+// VANTAGE (spec §3): metrics off GitHub's contributionsCollection include
+// the owner's PRIVATE contributions on their own token, so they're marked
+// vantageSensitive — the seam owner-namespaces their cache so a privileged
+// number is never served to a public embedder.
 //
 // The METRIC CATALOGUE below doubles as the compatibility matrix surfaced
 // via /api/meta: every entry declares which subject kinds it accepts, so
@@ -39,9 +41,11 @@ export const METRICS: ReadonlyArray<MetricDef> = [
     label: "Commits (last year)",
     subjectKinds: USER_ONLY,
     valueType: "number",
-    resolve: async (s, cache) =>
+    vantageSensitive: true, // includes restrictedContributionsCount on owner's token
+    resolve: async (s, ctx) =>
       numberValue(
-        (await userContributions({ login: s.id }, cache)).totalCommitsLastYear,
+        (await githubAtoms.userContributions({ login: s.id }, ctx))
+          .totalCommitsLastYear,
       ),
   },
   {
@@ -50,8 +54,11 @@ export const METRICS: ReadonlyArray<MetricDef> = [
     label: "Commits (all-time)",
     subjectKinds: USER_ONLY,
     valueType: "number",
-    resolve: async (s, cache) =>
-      numberValue((await userLifetime({ login: s.id }, cache)).lifetimeCommits),
+    vantageSensitive: true,
+    resolve: async (s, ctx) =>
+      numberValue(
+        (await githubAtoms.userLifetime({ login: s.id }, ctx)).lifetimeCommits,
+      ),
   },
   {
     provider: "github",
@@ -59,9 +66,10 @@ export const METRICS: ReadonlyArray<MetricDef> = [
     label: "Current streak (days)",
     subjectKinds: USER_ONLY,
     valueType: "number",
-    resolve: async (s, cache) =>
+    vantageSensitive: true, // calendar includes private contribution days on owner's token
+    resolve: async (s, ctx) =>
       numberValue(
-        (await userContributions({ login: s.id }, cache)).currentStreak,
+        (await githubAtoms.userContributions({ login: s.id }, ctx)).currentStreak,
       ),
   },
   {
@@ -70,9 +78,10 @@ export const METRICS: ReadonlyArray<MetricDef> = [
     label: "Longest streak (days)",
     subjectKinds: USER_ONLY,
     valueType: "number",
-    resolve: async (s, cache) =>
+    vantageSensitive: true,
+    resolve: async (s, ctx) =>
       numberValue(
-        (await userContributions({ login: s.id }, cache)).longestStreak,
+        (await githubAtoms.userContributions({ login: s.id }, ctx)).longestStreak,
       ),
   },
   {
@@ -81,9 +90,11 @@ export const METRICS: ReadonlyArray<MetricDef> = [
     label: "Total contributions (last year)",
     subjectKinds: USER_ONLY,
     valueType: "number",
-    resolve: async (s, cache) =>
+    vantageSensitive: true,
+    resolve: async (s, ctx) =>
       numberValue(
-        (await userContributions({ login: s.id }, cache)).totalContributions,
+        (await githubAtoms.userContributions({ login: s.id }, ctx))
+          .totalContributions,
       ),
   },
   {
@@ -92,8 +103,11 @@ export const METRICS: ReadonlyArray<MetricDef> = [
     label: "Public repositories",
     subjectKinds: USER_ONLY,
     valueType: "number",
-    resolve: async (s, cache) =>
-      numberValue((await userOverview({ login: s.id }, cache)).publicRepoCount),
+    // privacy:PUBLIC query → vantage-stable (same on any token).
+    resolve: async (s, ctx) =>
+      numberValue(
+        (await githubAtoms.userOverview({ login: s.id }, ctx)).publicRepoCount,
+      ),
   },
   {
     provider: "github",
@@ -101,8 +115,10 @@ export const METRICS: ReadonlyArray<MetricDef> = [
     label: "Followers",
     subjectKinds: USER_ONLY,
     valueType: "number",
-    resolve: async (s, cache) =>
-      numberValue((await userOverview({ login: s.id }, cache)).followers),
+    resolve: async (s, ctx) =>
+      numberValue(
+        (await githubAtoms.userOverview({ login: s.id }, ctx)).followers,
+      ),
   },
   // ── Nitrotype ───────────────────────────────────────────────────────
   {
@@ -111,8 +127,8 @@ export const METRICS: ReadonlyArray<MetricDef> = [
     label: "Average WPM",
     subjectKinds: USER_ONLY,
     valueType: "number",
-    resolve: async (s, cache) =>
-      numberValue((await nitrotypeRacer({ username: s.id }, cache)).avgSpeed),
+    resolve: async (s, ctx) =>
+      numberValue((await nitrotypeAtoms.racer({ username: s.id }, ctx)).avgSpeed),
   },
   {
     provider: "nitrotype",
@@ -120,9 +136,9 @@ export const METRICS: ReadonlyArray<MetricDef> = [
     label: "Highest WPM",
     subjectKinds: USER_ONLY,
     valueType: "number",
-    resolve: async (s, cache) =>
+    resolve: async (s, ctx) =>
       numberValue(
-        (await nitrotypeRacer({ username: s.id }, cache)).highestSpeed,
+        (await nitrotypeAtoms.racer({ username: s.id }, ctx)).highestSpeed,
       ),
   },
   {
@@ -131,9 +147,9 @@ export const METRICS: ReadonlyArray<MetricDef> = [
     label: "Races played",
     subjectKinds: USER_ONLY,
     valueType: "number",
-    resolve: async (s, cache) =>
+    resolve: async (s, ctx) =>
       numberValue(
-        (await nitrotypeRacer({ username: s.id }, cache)).racesPlayed,
+        (await nitrotypeAtoms.racer({ username: s.id }, ctx)).racesPlayed,
       ),
   },
   {
@@ -142,8 +158,8 @@ export const METRICS: ReadonlyArray<MetricDef> = [
     label: "Level",
     subjectKinds: USER_ONLY,
     valueType: "number",
-    resolve: async (s, cache) =>
-      numberValue((await nitrotypeRacer({ username: s.id }, cache)).level),
+    resolve: async (s, ctx) =>
+      numberValue((await nitrotypeAtoms.racer({ username: s.id }, ctx)).level),
   },
 ];
 
@@ -181,7 +197,7 @@ export const BindSchema: z.ZodType<Bind> = z.union([
 // clear 4xx; never silently renders a wrong number.
 export async function resolveBind(
   bind: Bind,
-  cache: DedupeCache,
+  ctx: RenderContext,
 ): Promise<BoundValue> {
   // `value` is unique to the literal arm — narrows the union cleanly
   // (provider is an open string on the data arm, so it can't discriminate).
@@ -199,7 +215,23 @@ export async function resolveBind(
         `(accepts: ${def.subjectKinds.join(", ")}).`,
     );
   }
-  return def.resolve(subject, cache);
+  return def.resolve(subject, ctx);
+}
+
+// A bind is "privileged" if its metric is private or vantage-sensitive —
+// i.e. its rendered value can include the owner's private data on their own
+// token. The render route uses this to owner-namespace the L1 render-output
+// cache for such scenes (mirroring the L2 invariant one layer up), so a
+// privileged render is never served to a public embedder. A `literal` bind
+// is never privileged.
+export function bindIsPrivileged(bind: Bind): boolean {
+  if ("value" in bind) return false;
+  const def = findMetric(bind.provider, bind.metric);
+  return def != null && (def.scope === "private" || def.vantageSensitive === true);
+}
+
+export function sceneHasPrivilegedBind(scene: Scene): boolean {
+  return scene.elements.some((el) => el.bind != null && bindIsPrivileged(el.bind));
 }
 
 // The compatibility matrix for /api/meta — the catalogue minus the
@@ -210,6 +242,10 @@ export function metricMatrix(): ReadonlyArray<{
   label: string;
   subjectKinds: ReadonlyArray<string>;
   valueType: string;
+  // Surfaced so the editor can label/flag privileged metrics (needs a BYO-PAT
+  // + own subject to show the private-inclusive value).
+  vantageSensitive: boolean;
+  scope: "public" | "private";
 }> {
   return METRICS.map((m) => ({
     provider: m.provider,
@@ -217,5 +253,7 @@ export function metricMatrix(): ReadonlyArray<{
     label: m.label,
     subjectKinds: m.subjectKinds,
     valueType: m.valueType,
+    vantageSensitive: m.vantageSensitive === true,
+    scope: m.scope ?? "public",
   }));
 }

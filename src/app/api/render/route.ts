@@ -1,13 +1,18 @@
+import { after } from "next/server";
 import { inflateCapped, decodeConfig } from "@/lib/encode/codec";
 import { LayoutSpec } from "@/lib/cards/spec";
 import { renderCompound } from "@/lib/cards/compound";
 import { Scene } from "@/lib/scene/scene-spec";
 import { renderScene } from "@/lib/scene/render";
 import { getPreset } from "@/lib/scene/presets";
+import { sceneHasPrivilegedBind } from "@/lib/scene/bind";
 import { etagOf } from "@/lib/cards/etag";
 import { l1ReadThrough, l1Key, stableStringify } from "@/lib/data/l1cache";
 import { meterRender } from "@/lib/data/usage";
 import { redisConfigured } from "@/lib/data/redis";
+import { DedupeCache } from "@/lib/data/cache";
+import type { RenderContext } from "@/lib/data/seam";
+import { auth } from "@/lib/auth/auth";
 import type { CardFormat } from "@/lib/cards/types";
 
 // Render endpoint. Two config shapes, four transports, one Node runtime
@@ -68,12 +73,30 @@ function sceneIsDataDependent(scene: Scene): boolean {
   );
 }
 
+// Resolve the rendering OWNER (spec §5). Editor preview / authenticated
+// callers carry a Better Auth session → owner-from-session. (Embed
+// owner-from-published-id arrives with the /i/<id> route in Phase C.)
+// NEVER blocks a render on auth: if session resolution fails, treat the
+// request as anonymous (the public front line must stay good).
+async function resolveOwner(
+  request: Request,
+): Promise<{ userId: string } | null> {
+  try {
+    const session = await auth.api.getSession({ headers: request.headers });
+    return session?.user?.id ? { userId: session.user.id } : null;
+  } catch {
+    return null;
+  }
+}
+
 // Shared L1 read-through + response. A cache hit returns stored bytes with
-// NO render and NO render-meter tick; a miss renders, caches, and meters.
+// NO render and NO render-meter tick; a miss renders, caches, and meters
+// (attributed to `ownerId` — the per-owner abuse meter, spec §7).
 // Degrades to a direct render when Upstash is unconfigured (X-L1: bypass).
 async function respondWithL1(args: {
   keyParts: readonly string[];
   ttlMs: number;
+  ownerId: string | null;
   request: Request;
   doRender: () => Promise<{ body: string | Uint8Array; contentType: string }>;
   headers: Record<string, string>;
@@ -98,9 +121,11 @@ async function respondWithL1(args: {
 
   const { render: out, hit } = result;
   if (!hit && redisConfigured()) {
-    // Meter the compute (abuse meter). Anonymous for now — owner
-    // attribution arrives with the auth wiring (sequenced after this lane).
-    await meterRender({ ownerId: null }).catch(() => {});
+    // Meter the compute (abuse meter) — attributed to the owner when known,
+    // else the anonymous shared bucket. Per-render, on MISS only (an L1 hit
+    // cost no compute). Embeds meter per published-URL/owner, never per IP
+    // (camo hides viewers — spec §7).
+    await meterRender({ ownerId: args.ownerId }).catch(() => {});
   }
   const xL1 = redisConfigured() ? (hit ? "hit" : "miss") : "bypass";
 
@@ -263,9 +288,34 @@ async function renderSceneAndRespond(
   }
 
   const scene = parsed.data;
+  const owner = await resolveOwner(request);
+
+  // RenderContext threads owner + per-render L1 + SWR hook into the seam.
+  const ctx: RenderContext = {
+    owner,
+    l1: new DedupeCache(),
+    waitUntil: (p) => after(p),
+  };
+
+  // L1 render-output owner-namespacing (mirrors the L2 §6/§14.5 invariant
+  // one layer up): a privileged scene (private / vantage-sensitive bind)
+  // rendered by an OWNER can embed their private data, so its bytes must
+  // NOT be served to a public embedder. Key by owner in that case; a public
+  // scene (or anonymous render) keeps the shared key. Anonymous always reads
+  // the public key → the public-only render, regardless.
+  const ownerNs =
+    owner && sceneHasPrivilegedBind(scene) ? `owner:${owner.userId}` : "public";
+
   return respondWithL1({
-    keyParts: ["scene", format, stableStringify(scene), presentationKey(url)],
+    keyParts: [
+      "scene",
+      format,
+      stableStringify(scene),
+      presentationKey(url),
+      ownerNs,
+    ],
     ttlMs: sceneIsDataDependent(scene) ? L1_TTL_DATA : L1_TTL_STATIC,
+    ownerId: owner?.userId ?? null,
     request,
     doRender: () =>
       renderScene(
@@ -273,6 +323,7 @@ async function renderSceneAndRespond(
         format,
         `${url.protocol}//${url.host}`,
         url.searchParams,
+        ctx,
       ),
     headers: {
       "X-Card": "scene",
@@ -301,6 +352,9 @@ async function renderAndRespond(
     // Legacy compound cards fetch upstream via their own resolvers; without
     // per-card data introspection, cap L1 at the L2 data floor.
     ttlMs: L1_TTL_DATA,
+    // Legacy compound path stays anonymous (public front line); it doesn't
+    // flow through the owner-aware seam.
+    ownerId: null,
     request,
     doRender: () =>
       renderCompound(

@@ -1,5 +1,5 @@
 import type { z } from "zod";
-import type { DedupeCache } from "@/lib/data/cache";
+import type { RenderContext } from "@/lib/data/seam";
 import type { Theme, CardFormat } from "@/lib/cards/types";
 
 // ─────────────────────────────────────────────────────────────────────
@@ -66,10 +66,19 @@ export type MetricDef = {
   // The compatibility matrix: which subject kinds this metric accepts.
   subjectKinds: ReadonlyArray<SubjectKind>;
   valueType: "number" | "string";
-  // Resolve the metric for a subject. MUST call the EXISTING data atoms
-  // (data/atoms.ts, data/nitrotype.ts) — the bind layer is a thin seam
-  // over them and never reimplements fetching.
-  resolve: (subject: Subject, cache: DedupeCache) => Promise<BoundValue>;
+  // Cache/visibility scope (spec §3). "public" (default) = shared cache;
+  // "private" = always owner-namespaced + requires the owner's own token.
+  scope?: "public" | "private";
+  // True when the value DEPENDS on the token vantage — it includes the
+  // owner's PRIVATE data on their own token (e.g. GitHub commits/streaks
+  // off contributionsCollection). Such a render is owner-namespaced at
+  // every cache layer so a privileged number is never served publicly.
+  vantageSensitive?: boolean;
+  // Resolve the metric for a subject. MUST call the EXISTING seam atoms
+  // (data/atoms-seam.ts) — the bind layer is a thin seam over them and
+  // never reimplements fetching. The RenderContext carries the owner +
+  // per-render L1 + waitUntil that drive token selection and caching.
+  resolve: (subject: Subject, ctx: RenderContext) => Promise<BoundValue>;
 };
 
 // ── Transform & anchoring ────────────────────────────────────────────
