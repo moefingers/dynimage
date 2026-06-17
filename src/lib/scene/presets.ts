@@ -27,6 +27,10 @@ export type Preset = {
   description: string;
   // Subject kinds this preset's bindings accept (drives editor wiring).
   subjectKinds: ReadonlyArray<SubjectKind>;
+  // A real sample subject so the preset renders out-of-the-box on select
+  // (the editor loads it on preset switch — different providers need
+  // provider-valid handles, e.g. typing-orbit binds Nitrotype).
+  defaultSubject: string;
   build: (params: PresetParams) => Scene;
 };
 
@@ -271,6 +275,7 @@ const PRESETS: Record<string, Preset> = {
     description:
       "Neon orbit with the GitHub octocat caged at center, last-year commit headline + all-time subline.",
     subjectKinds: ["user"],
+    defaultSubject: "moefingers", // GitHub
     build: buildCommitsOrbit,
   },
   "typing-orbit": {
@@ -279,6 +284,7 @@ const PRESETS: Record<string, Preset> = {
     description:
       "Prism orbit with the Nitrotype mark caged at center, average-WPM headline + best-WPM subline.",
     subjectKinds: ["user"],
+    defaultSubject: "bigmoemoney", // Nitrotype handle (not a GitHub login)
     build: buildTypingOrbit,
   },
   syndicate: {
@@ -287,6 +293,7 @@ const PRESETS: Record<string, Preset> = {
     description:
       "Counter-rotating brand lattice, wordmark, and three service tiles.",
     subjectKinds: ["user"],
+    defaultSubject: "moefingers",
     build: buildSyndicate,
   },
 };
