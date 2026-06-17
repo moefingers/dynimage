@@ -42,10 +42,29 @@ const ghBtn: React.CSSProperties = {
   marginBottom: 14,
 };
 
+// Open-redirect guard: a gated action passes ?redirect=<where to return>.
+// Only allow a root-relative path or a SAME-ORIGIN absolute URL — never an
+// off-site URL (post-auth open redirect / phishing). Falls back to /account.
+function safeRedirect(raw: string | null): string {
+  if (!raw) return "/account";
+  // root-relative (but NOT protocol-relative "//evil.com")
+  if (raw.startsWith("/") && !raw.startsWith("//")) return raw;
+  if (typeof window !== "undefined") {
+    try {
+      const u = new URL(raw, window.location.origin);
+      if (u.origin === window.location.origin)
+        return u.pathname + u.search + u.hash;
+    } catch {
+      /* malformed → fall through */
+    }
+  }
+  return "/account";
+}
+
 export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const router = useRouter();
   const sp = useSearchParams();
-  const redirect = sp.get("redirect") || "/account";
+  const redirect = safeRedirect(sp.get("redirect"));
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");

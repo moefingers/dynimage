@@ -97,6 +97,13 @@ async function respondWithL1(args: {
   keyParts: readonly string[];
   ttlMs: number;
   ownerId: string | null;
+  // SECURITY (SEC-HIGH, scout's CDN finding): when true, emit
+  // `private, no-store` so the Vercel EDGE never caches/cross-serves this
+  // response. Set for any SESSION-OWNER-authed render — the CDN keys by URL
+  // and can't tell authed from anon, so an authed response cached publicly
+  // would be served to a cookieless anon (defeating L1 owner-namespacing,
+  // which lives BELOW the edge). Anonymous/public renders stay CDN-cacheable.
+  noStore: boolean;
   request: Request;
   doRender: () => Promise<{ body: string | Uint8Array; contentType: string }>;
   headers: Record<string, string>;
@@ -128,12 +135,14 @@ async function respondWithL1(args: {
     await meterRender({ ownerId: args.ownerId }).catch(() => {});
   }
   const xL1 = redisConfigured() ? (hit ? "hit" : "miss") : "bypass";
+  // Edge-cacheability: authed renders are NEVER publicly cacheable (above).
+  const cacheControl = args.noStore ? "private, no-store" : CACHE_CONTROL;
 
   const ifNoneMatch = args.request.headers.get("if-none-match");
   if (ifNoneMatch && ifNoneMatch === out.etag) {
     return new Response(null, {
       status: 304,
-      headers: { ETag: out.etag, "Cache-Control": CACHE_CONTROL, "X-L1": xL1 },
+      headers: { ETag: out.etag, "Cache-Control": cacheControl, "X-L1": xL1 },
     });
   }
 
@@ -141,7 +150,7 @@ async function respondWithL1(args: {
   return new Response(body, {
     headers: {
       "Content-Type": out.contentType,
-      "Cache-Control": CACHE_CONTROL,
+      "Cache-Control": cacheControl,
       ETag: out.etag,
       "X-L1": xL1,
       ...args.headers,
@@ -316,6 +325,9 @@ async function renderSceneAndRespond(
     ],
     ttlMs: sceneIsDataDependent(scene) ? L1_TTL_DATA : L1_TTL_STATIC,
     ownerId: owner?.userId ?? null,
+    // Any authed render is per-viewer from the CDN's view → never edge-cache
+    // it (SEC-HIGH). Anonymous renders stay publicly cacheable.
+    noStore: owner != null,
     request,
     doRender: () =>
       renderScene(
@@ -353,8 +365,9 @@ async function renderAndRespond(
     // per-card data introspection, cap L1 at the L2 data floor.
     ttlMs: L1_TTL_DATA,
     // Legacy compound path stays anonymous (public front line); it doesn't
-    // flow through the owner-aware seam.
+    // flow through the owner-aware seam → always publicly cacheable.
     ownerId: null,
+    noStore: false,
     request,
     doRender: () =>
       renderCompound(
