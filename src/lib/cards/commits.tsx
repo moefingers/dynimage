@@ -29,6 +29,21 @@ type Data = {
   contrib: UserContributions;
 };
 
+// Single-sourced background-wash opacity shared by the SVG and Satori
+// renderers (Stab #5: cross-format parity). The SVG path muted the
+// gradient center to 0.55 via stop-opacity; the Satori path used the
+// gradient color at full opacity, reading visibly more saturated. Both
+// now apply this one value (Satori via rgba, since a CSS gradient color
+// stop can't carry a separate opacity channel).
+const BG_GRADIENT_OPACITY = 0.55;
+
+function gradientRgba(hex: string): string {
+  const m = /^#([0-9a-fA-F]{6})$/.exec(hex);
+  if (!m) return hex;
+  const n = parseInt(m[1]!, 16);
+  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${BG_GRADIENT_OPACITY})`;
+}
+
 // ── SVG renderer ──────────────────────────────────────────────────────
 // Animated count-up (SMIL <animate> on text content), radial gradient
 // background, and per-prefers-color-scheme theming when the request
@@ -55,7 +70,7 @@ const renderSvg: CardRenderer<Data> = async ({
     body: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(`${total} commits in the last year by ${data.overview.login}`)}">
   <defs>
     <radialGradient id="bg" cx="50%" cy="50%" r="70%">
-      <stop offset="0%" stop-color="${theme.gradient}" stop-opacity="0.55"/>
+      <stop offset="0%" stop-color="${theme.gradient}" stop-opacity="${BG_GRADIENT_OPACITY}"/>
       <stop offset="100%" stop-color="${theme.bg}" stop-opacity="1"/>
     </radialGradient>
     <linearGradient id="sheen" x1="0%" y1="0%" x2="100%" y2="0%">
@@ -111,7 +126,7 @@ const renderPng: CardRenderer<Data> = async ({
         flexDirection: "column",
         justifyContent: "space-between",
         padding: "28px 32px",
-        backgroundImage: `radial-gradient(circle at 50% 50%, ${theme.gradient} 0%, ${theme.bg} 75%)`,
+        backgroundImage: `radial-gradient(circle at 50% 50%, ${gradientRgba(theme.gradient)} 0%, ${theme.bg} 75%)`,
         backgroundColor: theme.bg,
         border: `1px solid ${theme.stroke}`,
         borderRadius: 14,

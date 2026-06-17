@@ -3,6 +3,9 @@ import { frameElement } from "./elements/frame";
 import { textElement } from "./elements/text";
 import { logoElement } from "./elements/logo";
 import { statElement } from "./elements/stat";
+import { orbitElement } from "./elements/orbit";
+import { latticeElement } from "./elements/lattice";
+import { tileGridElement } from "./elements/tile-grid";
 
 // ─────────────────────────────────────────────────────────────────────
 // Element registry — the same self-registering pattern as the card
@@ -10,16 +13,18 @@ import { statElement } from "./elements/stat";
 // one import + one line here; everything downstream (render, /api/meta)
 // reads from this map.
 //
-// Reference set for the CONTRACT PR: frame, text, logo, stat — enough to
-// prove static + anchored + data-bound rendering end-to-end. The full
-// §50 starter set (orbit/sphere/icosa, prism, lattice, tile-grid) is
-// decomposed from the flagship cards in the follow-up phase.
+// §50 starter element set: frame, text/wordmark, logo, data-bound stat,
+// orbit (sphere/icosa, neon|prism treatments), lattice background,
+// tile-grid. Enough to compose the three flagship presets.
 // ─────────────────────────────────────────────────────────────────────
 const ELEMENTS = {
   frame: frameElement,
   text: textElement,
   logo: logoElement,
   stat: statElement,
+  orbit: orbitElement,
+  lattice: latticeElement,
+  "tile-grid": tileGridElement,
 } as const;
 
 export type ElementType = keyof typeof ELEMENTS;

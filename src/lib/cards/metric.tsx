@@ -20,6 +20,12 @@ type Input = z.infer<typeof Input>;
 
 type Data = Input;
 
+// Single-sourced label tracking shared by both renderers (Stab #5: cross-
+// format parity). Expressed em-relative; the SVG path uses it directly and
+// the Satori path multiplies by the label font size to get pixels, so the
+// two no longer drift (SVG was 0.08em, Satori a fixed 1.5px).
+const LABEL_LETTER_SPACING_EM = 0.08;
+
 const renderSvg: CardRenderer<Data> = async ({
   data,
   theme,
@@ -41,7 +47,7 @@ const renderSvg: CardRenderer<Data> = async ({
         font-family="ui-sans-serif, system-ui, sans-serif"
         font-size="${Math.round(data.size * 0.25)}" font-weight="500"
         fill="${theme.textMuted}"
-        text-transform="uppercase" letter-spacing="0.08em">${esc(data.label.toUpperCase())}</text>
+        text-transform="uppercase" letter-spacing="${LABEL_LETTER_SPACING_EM}em">${esc(data.label.toUpperCase())}</text>
 </svg>`,
   };
 };
@@ -98,7 +104,7 @@ const renderPng: CardRenderer<Data> = async ({
           fontWeight: 500,
           color: theme.textMuted,
           textTransform: "uppercase",
-          letterSpacing: 1.5,
+          letterSpacing: Math.round(data.size * 0.25) * LABEL_LETTER_SPACING_EM,
         }}
       >
         {data.label}
