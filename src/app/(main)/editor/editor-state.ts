@@ -20,28 +20,45 @@ export type EditorDraft = {
 
 const DRAFT_KEY = "dynimage:editor-draft";
 
+// Schema version for the persisted/encoded draft. Bump whenever the draft
+// shape or its meaning changes (e.g. knob keys, preset ids). A draft whose
+// version != current is DISCARDED on load — a stale draft from a prior
+// build can't desync the editor (field-vs-render mismatch on a dirty
+// reload). The in-memory EditorDraft stays version-free; `v` is a
+// storage/wire concern stamped on save/encode and checked on read.
+const DRAFT_VERSION = 1;
+
+// Validate + normalize a parsed object into an EditorDraft, enforcing the
+// version. Returns null for a missing/mismatched version or a bad shape.
+function parseDraft(obj: unknown): EditorDraft | null {
+  if (!obj || typeof obj !== "object") return null;
+  const o = obj as Record<string, unknown>;
+  if (o.v !== DRAFT_VERSION) return null; // stale/foreign draft → discard
+  if (typeof o.presetName !== "string") return null;
+  return {
+    presetName: o.presetName,
+    subject: typeof o.subject === "string" ? o.subject : "",
+    theme: typeof o.theme === "string" ? o.theme : "dark",
+    overrides:
+      o.overrides && typeof o.overrides === "object"
+        ? (o.overrides as EditorDraft["overrides"])
+        : {},
+  };
+}
+
 export function encodeEditorState(d: EditorDraft): string {
-  return base64urlEncode(new TextEncoder().encode(JSON.stringify(d)));
+  return base64urlEncode(
+    new TextEncoder().encode(JSON.stringify({ v: DRAFT_VERSION, ...d })),
+  );
 }
 
 export function decodeEditorState(s: string): EditorDraft | null {
   try {
-    const obj = JSON.parse(new TextDecoder().decode(base64urlDecode(s)));
-    if (obj && typeof obj === "object" && typeof obj.presetName === "string") {
-      return {
-        presetName: obj.presetName,
-        subject: typeof obj.subject === "string" ? obj.subject : "",
-        theme: typeof obj.theme === "string" ? obj.theme : "dark",
-        overrides:
-          obj.overrides && typeof obj.overrides === "object"
-            ? obj.overrides
-            : {},
-      };
-    }
+    return parseDraft(JSON.parse(new TextDecoder().decode(base64urlDecode(s))));
   } catch {
     /* malformed ?s= — fall through to null (default/local restore) */
+    return null;
   }
-  return null;
 }
 
 // The absolute URL that reopens the editor in this exact state — used as the
@@ -52,7 +69,7 @@ export function editorReturnUrl(origin: string, d: EditorDraft): string {
 
 export function saveDraft(d: EditorDraft): void {
   try {
-    localStorage.setItem(DRAFT_KEY, JSON.stringify(d));
+    localStorage.setItem(DRAFT_KEY, JSON.stringify({ v: DRAFT_VERSION, ...d }));
   } catch {
     /* storage blocked/full — non-fatal */
   }
@@ -62,18 +79,7 @@ export function loadDraft(): EditorDraft | null {
   try {
     const raw = localStorage.getItem(DRAFT_KEY);
     if (!raw) return null;
-    const obj = JSON.parse(raw);
-    if (obj && typeof obj === "object" && typeof obj.presetName === "string") {
-      return {
-        presetName: obj.presetName,
-        subject: typeof obj.subject === "string" ? obj.subject : "",
-        theme: typeof obj.theme === "string" ? obj.theme : "dark",
-        overrides:
-          obj.overrides && typeof obj.overrides === "object"
-            ? obj.overrides
-            : {},
-      };
-    }
+    return parseDraft(JSON.parse(raw)); // null (discarded) if version != current
   } catch {
     /* malformed draft — ignore */
   }
