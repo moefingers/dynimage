@@ -1,4 +1,4 @@
-import { gunzipSync } from "node:zlib";
+import { inflateCapped } from "@/lib/encode/codec";
 import { LayoutSpec } from "@/lib/cards/spec";
 import { renderCompound } from "@/lib/cards/compound";
 import { Scene } from "@/lib/scene/scene-spec";
@@ -24,12 +24,16 @@ export const dynamic = "force-dynamic";
 
 const VALID_FORMATS = new Set<CardFormat>(["svg", "png", "webp", "avif"]);
 
-function decodeParam(param: string, gzipped: boolean): unknown {
+// Single decode path for BOTH transports (?scene= and ?spec=). The
+// inflate is size-capped BEFORE JSON.parse: `inflateCapped` aborts a gzip
+// bomb mid-stream and rejects an oversized raw payload, so an
+// attacker-supplied &z=1 on either param can never balloon memory — it
+// throws a CodecError, surfaced as a clean 400 by each caller. Single
+// source of the ceiling: MAX_DECODED_BYTES in lib/encode/codec.
+async function decodeParam(param: string, gzipped: boolean): Promise<unknown> {
   const raw = decodeBase64Url(param);
-  const text = gzipped
-    ? new TextDecoder().decode(gunzipSync(raw))
-    : new TextDecoder().decode(raw);
-  return JSON.parse(text);
+  const bytes = await inflateCapped(raw, gzipped);
+  return JSON.parse(new TextDecoder().decode(bytes));
 }
 
 export async function GET(request: Request): Promise<Response> {
@@ -55,7 +59,7 @@ export async function GET(request: Request): Promise<Response> {
   if (sceneParam) {
     let sceneJson: unknown;
     try {
-      sceneJson = decodeParam(sceneParam, gzipped);
+      sceneJson = await decodeParam(sceneParam, gzipped);
     } catch (e) {
       return new Response(`Failed to decode scene: ${errMessage(e)}`, {
         status: 400,
@@ -66,7 +70,7 @@ export async function GET(request: Request): Promise<Response> {
 
   let specJson: unknown;
   try {
-    specJson = decodeParam(specParam!, gzipped);
+    specJson = await decodeParam(specParam!, gzipped);
   } catch (e) {
     return new Response(`Failed to decode spec: ${errMessage(e)}`, {
       status: 400,
