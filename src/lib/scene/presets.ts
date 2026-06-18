@@ -219,7 +219,7 @@ function buildSyndicate(params: PresetParams): Scene {
         type: "text",
         transform: { x: 0, y: 28, w: 900, h: 28, z: 2 },
         knobs: {
-          text: "A SUITE OF SERVICES · BROUGHT TOGETHER",
+          text: "THE SITE THEY SEE · THE SOFTWARE BEHIND IT",
           size: 14,
           weight: "medium",
           align: "center",
