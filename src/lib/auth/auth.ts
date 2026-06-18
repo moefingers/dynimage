@@ -2,6 +2,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { db } from "@/lib/db/client";
 import { user, session, account, verification } from "@/lib/db/schema";
+import { githubGetUserInfo } from "./github-user-info";
 
 // Better Auth (spec §3) — canon across recanon/nitrotype. Identity model:
 //   - GitHub OAuth = the PRIMARY private-data path (scoped, revocable, no
@@ -31,6 +32,11 @@ export const auth = betterAuth({
     github: {
       clientId: process.env.GITHUB_OAUTH_CLIENT_ID ?? "",
       clientSecret: process.env.GITHUB_OAUTH_CLIENT_SECRET ?? "",
+      // Stab#23: harden the user-info fetch against transient GitHub API
+      // failures (the "first OAuth errors, retry works" bug) + robustly
+      // resolve a verified email for private-email accounts. See
+      // github-user-info.ts.
+      getUserInfo: githubGetUserInfo,
     },
   },
 });
