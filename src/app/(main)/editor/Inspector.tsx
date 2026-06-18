@@ -5,6 +5,7 @@ import type { SlotName } from "@/lib/scene/types";
 import type { ElementMetaEntry, MetricEntry, JsonSchema } from "./meta-types";
 import { controlFor, GROUP_ORDER } from "./controls-map";
 import { KnobControl } from "./controls";
+import { AssetPicker } from "./AssetPicker";
 import { patchTransform, setAnchor, setBind, setKnob } from "./canvas-helpers";
 
 // The B2 inspector: the selected element's Transform · Anchor · Knobs · Bind
@@ -216,6 +217,11 @@ export function Inspector({
       {/* Bind (data-capable elements only) */}
       {entry?.bind.accepts === "value" && (
         <BindEditor scene={scene} el={el} metrics={metrics} onScene={onScene} />
+      )}
+
+      {/* Asset (elements that accept an uploaded-image override, e.g. logo) */}
+      {entry?.asset?.accepts && (
+        <AssetPicker scene={scene} elementId={el.id} onScene={onScene} />
       )}
 
       {/* Knobs (meta-driven, full/advanced) */}

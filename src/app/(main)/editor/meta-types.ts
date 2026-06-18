@@ -33,6 +33,9 @@ export type ElementMetaEntry = {
   runtime: "edge" | "nodejs";
   defaultSize: { width: number; height: number };
   bind: BindAffinity;
+  // Whether this element accepts an uploaded-asset override (gates the
+  // inspector asset-picker). Defaults to not-accepting.
+  asset?: { accepts: boolean };
   slots: string[];
   knobsSchema: JsonSchema;
   meta: { title: string; description: string; supportsAnimation: boolean };

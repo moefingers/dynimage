@@ -176,6 +176,20 @@ export function setKnob(
   return next;
 }
 
+export function setAsset(
+  scene: Scene,
+  id: string,
+  asset: ElementSpec["asset"] | null,
+): Scene {
+  const next = clone(scene);
+  const el = (next.elements as ElementSpec[]).find((e) => e.id === id);
+  if (el) {
+    if (asset) el.asset = asset;
+    else delete el.asset;
+  }
+  return next;
+}
+
 export function setCanvasTheme(scene: Scene, theme: string): Scene {
   const next = clone(scene);
   next.canvas = { ...next.canvas, theme };
