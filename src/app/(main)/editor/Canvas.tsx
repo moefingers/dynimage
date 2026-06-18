@@ -155,6 +155,14 @@ export function Canvas({
           box.h = Math.max(8, d.start.h - dy);
           box.y = d.start.y + (d.start.h - box.h);
         }
+        // Shift = preserve aspect ratio (corner handles): drive h from w
+        // and re-anchor a north/west edge so the opposite corner stays put.
+        if (e.shiftKey && hd.length === 2 && d.start.h > 0) {
+          const aspect = d.start.w / d.start.h;
+          box.h = Math.max(8, box.w / aspect);
+          if (hd.includes("n")) box.y = d.start.y + (d.start.h - box.h);
+          if (hd.includes("w")) box.x = d.start.x + (d.start.w - box.w);
+        }
       } else if (d.mode === "rotate") {
         const cx = d.start.x + d.start.w / 2;
         const cy = d.start.y + d.start.h / 2;
@@ -214,30 +222,14 @@ export function Canvas({
     setLive({ id: selectedId, box: { ...selBox } });
   };
 
-  // Arrow-key nudge (keyboard parity).
-  const onKeyDown = (e: React.KeyboardEvent) => {
-    if (!sel || !selBox || sel.anchor) return;
-    const step = e.shiftKey ? 10 : 1;
-    let dx = 0;
-    let dy = 0;
-    if (e.key === "ArrowLeft") dx = -step;
-    else if (e.key === "ArrowRight") dx = step;
-    else if (e.key === "ArrowUp") dy = -step;
-    else if (e.key === "ArrowDown") dy = step;
-    else return;
-    e.preventDefault();
-    onScene(
-      patchTransform(scene, sel.id, { x: selBox.x + dx, y: selBox.y + dy }),
-    );
-  };
-
+  // Arrow-key nudge lives in CanvasEditor's GLOBAL keydown (works regardless
+  // of which panel has focus); the canvas div stays focusable for a11y.
   return (
     <div className="canvas-zone">
       <div
         ref={wrapRef}
         className={`canvas-fit ${pageVariant}`}
         tabIndex={0}
-        onKeyDown={onKeyDown}
         onPointerDown={() => onSelect(null)}
       >
         <div
