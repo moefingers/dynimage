@@ -36,27 +36,42 @@ export const logoElement: Element<Knobs> = {
   defaultSize: { width: 96, height: 96 },
   knobs: Knobs,
   bind: { accepts: "none" },
+  // Accepts an uploaded-asset override: when an `asset` ref is set on the
+  // element, the resolved image replaces the built-in icon (spec §10).
+  asset: { accepts: true },
   meta: {
     title: "Logo / brand mark",
     description:
-      "Centered brand mark (GitHub octocat, Nitrotype N) from the curated built-in set. Optional slow opacity breath.",
+      "Centered brand mark (GitHub octocat, Nitrotype N) from the curated built-in set, or an uploaded image. Optional slow opacity breath.",
     supportsAnimation: true,
   },
-  render: ({ knobs, theme, box, raster }) => {
+  render: ({ knobs, theme, box, raster, asset }) => {
     const { w, h } = box;
-    const fill = themeColor(theme, knobs.fill, "accent");
-    const { path, vb } = ICONS[knobs.icon];
     const size = Math.min(w, h) * knobs.scale;
-    const sc = size / vb;
-    const tx = w / 2 - size / 2;
-    const ty = h / 2 - size / 2;
+    const x = w / 2 - size / 2;
+    const y = h / 2 - size / 2;
     const animate =
       knobs.breathe && !raster
         ? `<animate attributeName="opacity" values="${knobs.dimOpacity.toFixed(2)};${knobs.peakOpacity.toFixed(2)};${knobs.dimOpacity.toFixed(2)}" ` +
           `keyTimes="0;0.5;1" calcMode="spline" keySplines="0.42 0 0.58 1; 0.42 0 0.58 1" dur="${knobs.dur}s" repeatCount="indefinite"/>`
         : "";
+
+    // Uploaded asset overrides the built-in icon. The data-URI is raster
+    // (png/webp/jpeg — enforced at upload), so it carries no script; it
+    // inlines safely. preserveAspectRatio centers it without distortion.
+    if (asset) {
+      return (
+        `<image href="${asset.dataUri}" x="${x.toFixed(2)}" y="${y.toFixed(2)}" ` +
+        `width="${size.toFixed(2)}" height="${size.toFixed(2)}" ` +
+        `preserveAspectRatio="xMidYMid meet" opacity="${knobs.peakOpacity}">${animate}</image>`
+      );
+    }
+
+    const fill = themeColor(theme, knobs.fill, "accent");
+    const { path, vb } = ICONS[knobs.icon];
+    const sc = size / vb;
     return (
-      `<g transform="translate(${tx.toFixed(2)} ${ty.toFixed(2)}) scale(${sc.toFixed(5)})">` +
+      `<g transform="translate(${x.toFixed(2)} ${y.toFixed(2)}) scale(${sc.toFixed(5)})">` +
       `<path d="${path}" fill="${fill}" opacity="${knobs.peakOpacity}">${animate}</path>` +
       `</g>`
     );

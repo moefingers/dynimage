@@ -141,12 +141,24 @@ export type Point = { x: number; y: number };
 // element has ONE `render` rather than a per-format map: composition is
 // SVG-fragment based (matching today's compound SVG path), and raster is
 // a single scene-level step (matching how `streak` rasterizes its SVG).
+// A resolved uploaded asset, handed to the element renderer as a ready-to-
+// embed data-URI. Like `bound`, the element receives the RESOLVED value —
+// it never fetches or touches the DB/Blob (the SSRF-safe resolution happens
+// centrally in prepareElements via the assets layer's resolveAsset).
+export type AssetData = {
+  dataUri: string;
+  mime: string;
+};
+
 export type ElementContext<TKnobs> = {
   knobs: TKnobs;
   theme: Theme;
   box: ResolvedBox;
   // Resolved bind value, or null for a static element / unbound render.
   bound: BoundValue | null;
+  // Resolved uploaded asset (data-URI), or null when the element has no
+  // asset reference or it couldn't be resolved (element falls back).
+  asset: AssetData | null;
   baseUrl: string;
   // Whether the fragment will be rasterized (png/webp/avif) rather than
   // served as live SVG. Elements use this to drop SMIL animation and
@@ -167,6 +179,13 @@ export type BindAffinity = {
   valueType?: "number" | "string";
 };
 
+// Whether an element accepts an uploaded-asset override (an `asset` ref on
+// its ElementSpec). Surfaced via /api/meta so the editor shows the
+// asset-picker only for accepting elements. Defaults to not-accepting.
+export type AssetAffinity = {
+  accepts: boolean;
+};
+
 export type ElementMeta = {
   title: string;
   description: string;
@@ -181,6 +200,8 @@ export type Element<TKnobs = unknown> = {
   knobs: z.ZodType<TKnobs>;
   // Whether/how this element consumes a data bind.
   bind: BindAffinity;
+  // Whether this element accepts an uploaded-asset override (default: no).
+  asset?: AssetAffinity;
   // Custom named slots beyond the geometric defaults. Maps a slot name to
   // a function of the element's resolved box → a point. Optional.
   slots?: Partial<Record<SlotName, (box: ResolvedBox) => Point>>;

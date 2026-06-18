@@ -51,6 +51,18 @@ export const ElementSpec = z.object({
   anchor: AnchorSchema.optional(),
   knobs: z.record(z.string(), z.unknown()).optional(),
   bind: BindSchema.optional(),
+  // Optional uploaded-asset override (spec §10). An EXTERNAL reference by
+  // id — resolved centrally (SSRF-safe) to a data-URI at render time, like
+  // `bind`. The id charset matches genId (base64url).
+  asset: z
+    .object({
+      id: z
+        .string()
+        .min(1)
+        .max(64)
+        .regex(/^[A-Za-z0-9_-]+$/, "asset id must be [A-Za-z0-9_-]"),
+    })
+    .optional(),
 });
 export type ElementSpec = z.infer<typeof ElementSpec>;
 

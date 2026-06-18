@@ -7,9 +7,11 @@ import type { RenderContext } from "@/lib/data/seam";
 import type { Scene } from "./scene-spec";
 import { getElement } from "./registry";
 import { resolveBind } from "./bind";
+import { resolveAsset } from "@/lib/assets/resolve";
 import { resolveBoxes, type PlacedElement } from "./anchor";
 import type {
   AnyElement,
+  AssetData,
   BoundValue,
   RenderedScene,
   ResolvedBox,
@@ -84,6 +86,7 @@ type Prepared = {
   element: AnyElement;
   knobs: unknown;
   bound: BoundValue | null;
+  asset: AssetData | null;
   z: number;
 };
 
@@ -115,11 +118,26 @@ async function prepareElements(
       }
       bound = await resolveBind(spec.bind, ctx);
     }
+    // Resolve an uploaded-asset override (spec §10). Same discipline as
+    // bind: validate affinity, resolve centrally (SSRF-safe), hand the
+    // element the RESOLVED data-URI. A reference that can't be resolved
+    // (deleted asset, Blob unavailable) yields null → the element falls
+    // back to its default (e.g. the logo's built-in icon) rather than break.
+    let asset: AssetData | null = null;
+    if (spec.asset) {
+      if (!element.asset?.accepts) {
+        throw new Error(
+          `Element "${spec.id}" (${spec.type}) does not accept an asset.`,
+        );
+      }
+      asset = await resolveAsset(spec.asset.id);
+    }
     prepared.push({
       id: spec.id,
       element,
       knobs: parsed.data,
       bound,
+      asset,
       z: spec.transform?.z ?? 0,
     });
     placed.push({
@@ -164,6 +182,7 @@ async function composeSvg(
       theme,
       box,
       bound: p.bound,
+      asset: p.asset,
       baseUrl,
       raster,
     });
