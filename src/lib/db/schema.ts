@@ -153,11 +153,35 @@ export const publishedEmbeds = pgTable(
     config: jsonb("config").notNull(),
     // true if any element binds private data (publish-time disclaimer §8)
     exposesPrivateData: boolean("exposes_private_data").notNull().default(false),
-    disabled: boolean("disabled").notNull().default(false), // moderation §11
+    // Moderation (§11): `flagged` auto-set when reports cross the threshold
+    // (queued for review); `disabled` is the admin action → /i/<id> 410s.
+    flagged: boolean("flagged").notNull().default(false),
+    disabled: boolean("disabled").notNull().default(false),
     createdAt: timestamp("created_at").notNull().defaultNow(),
     updatedAt: timestamp("updated_at").notNull().defaultNow(),
   },
   (t) => [index("published_embeds_owner_idx").on(t.ownerId)],
+);
+
+// Abuse reports (§11). Public, rate-limited POST /api/report → a row here.
+// One report per (embed, reporter-IP-hash) — the unique index stops a single
+// IP from inflating an id's report count. The raw IP is NEVER stored (hashed
+// with a server salt) — just enough to dedupe + threshold.
+export const reports = pgTable(
+  "reports",
+  {
+    id: text("id").primaryKey(),
+    publishedId: text("published_id")
+      .notNull()
+      .references(() => publishedEmbeds.id, { onDelete: "cascade" }),
+    reason: text("reason").notNull(),
+    reporterIpHash: text("reporter_ip_hash").notNull(),
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [
+    index("reports_published_idx").on(t.publishedId),
+    uniqueIndex("reports_dedupe_idx").on(t.publishedId, t.reporterIpHash),
+  ],
 );
 
 // Durable usage ledger (spec §7). The HOT counters live in Upstash
