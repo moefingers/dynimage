@@ -9,6 +9,8 @@ import { SchemaForm } from "./SchemaForm";
 import { ThemePicker } from "./controls";
 import { previewUrl, embedSnippet, type ConfigState } from "./encoding";
 import { publishScene, type PublishResult } from "./publish";
+import { useUndoable } from "./useUndoable";
+import { CanvasEditor } from "./CanvasEditor";
 import {
   initialDraft,
   saveDraft,
@@ -62,18 +64,28 @@ export function Editor() {
   const [publishErr, setPublishErr] = useState<string>("");
   const [pubCopied, setPubCopied] = useState(false);
 
+  // B2 advanced canvas. `history` is the undo/redo-tracked working Scene;
+  // when `advanced`, it (not the preset+overrides) is the live document.
+  const [advanced, setAdvanced] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const history = useUndoable<Scene | null>(null);
+
   const catalog = useMemo(() => {
     const m = new Map<string, ElementMetaEntry>();
     meta?.elements.forEach((e) => m.set(e.type, e));
     return m;
   }, [meta]);
 
-  const effectiveScene = useMemo(
+  const basicEffectiveScene = useMemo(
     () => (baseScene ? applyOverrides(baseScene, overrides, theme) : null),
     [baseScene, overrides, theme],
   );
+  // In advanced mode the canvas working-scene is the live document; in basic
+  // it's the preset + knob overrides. Both feed the same preview/encoding.
+  const effectiveScene = advanced ? history.present : basicEffectiveScene;
 
-  const tweaked = Object.keys(overrides).length > 0;
+  // Advanced is always "custom" → never the ?preset= short form.
+  const tweaked = advanced ? true : Object.keys(overrides).length > 0;
   const configState = useMemo<ConfigState | null>(
     () =>
       effectiveScene
@@ -98,6 +110,12 @@ export function Editor() {
           setSubject(draft.subject);
           setTheme(draft.theme);
           setOverrides(draft.overrides);
+          // Restore an in-progress B2 canvas exactly (publish-from-canvas +
+          // sign-in-return is lossless).
+          if (draft.advanced && draft.scene) {
+            history.reset(draft.scene);
+            setAdvanced(true);
+          }
         }
         setMeta(m);
         if (!draft && m.presets[0]) {
@@ -109,14 +127,23 @@ export function Editor() {
     return () => {
       live = false;
     };
+    // Mount-only restore; history.reset is stable.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Persist the draft so a refresh (or a gated sign-in round-trip) never
-  // loses work. localStorage only — account-side drafts are deputy's lane.
+  // loses work — including an in-progress advanced canvas. localStorage only.
   useEffect(() => {
     if (!presetName) return;
-    saveDraft({ presetName, subject, theme, overrides });
-  }, [presetName, subject, theme, overrides]);
+    saveDraft({
+      presetName,
+      subject,
+      theme,
+      overrides,
+      advanced,
+      scene: advanced ? (history.present ?? undefined) : undefined,
+    });
+  }, [presetName, subject, theme, overrides, advanced, history.present]);
 
   // (Re)build the base scene whenever preset or subject settles. Overrides
   // are preserved (re-applied via effectiveScene), so a subject change keeps
@@ -187,8 +214,33 @@ export function Editor() {
   const activePreset = presets.find((p) => p.name === presetName);
 
   const currentDraft = useCallback(
-    (): EditorDraft => ({ presetName, subject, theme, overrides }),
-    [presetName, subject, theme, overrides],
+    (): EditorDraft => ({
+      presetName,
+      subject,
+      theme,
+      overrides,
+      advanced,
+      scene: advanced ? (history.present ?? undefined) : undefined,
+    }),
+    [presetName, subject, theme, overrides, advanced, history.present],
+  );
+
+  // B1 → B2: load the current scene onto the canvas (lossless), fresh history.
+  const enterAdvanced = useCallback(() => {
+    if (!basicEffectiveScene) return;
+    history.reset(structuredClone(basicEffectiveScene));
+    setSelectedId(null);
+    setPublished(null);
+    setAdvanced(true);
+  }, [basicEffectiveScene, history]);
+
+  // B2 commit: push a scene mutation onto undo history (+ optional selection).
+  const onSceneB2 = useCallback(
+    (s: Scene, selectId?: string | null) => {
+      history.set(s);
+      if (selectId !== undefined) setSelectedId(selectId);
+    },
+    [history],
   );
 
   // Publish: gated. Anonymous → save draft + contextual sign-in that returns
@@ -239,136 +291,164 @@ export function Editor() {
 
   return (
     <div className="editor">
-      {/* ── Preset rail ─────────────────────────────────────────── */}
-      <aside className="rail">
-        <h2 className="rail-head">Start from a preset</h2>
-        <div className="rail-list">
-          {presets.map((p) => (
-            <button
-              key={p.name}
-              type="button"
-              className={p.name === presetName ? "preset active" : "preset"}
-              onClick={() => {
-                // Load THIS preset's valid sample subject so it renders
-                // out-of-the-box (a GitHub login isn't a Nitrotype handle).
-                setOverrides({});
-                setPublished(null);
-                setPublishErr("");
-                setPresetName(p.name);
-                setSubject(p.defaultSubject);
-              }}
-            >
-              <span className="preset-title">{p.title}</span>
-              <span className="preset-desc">{p.description}</span>
-            </button>
-          ))}
-          {presets.length === 0 && <p className="muted">Loading presets…</p>}
-        </div>
-      </aside>
+      {/* ── Preset rail (basic tier only) ──────────────────────── */}
+      {!advanced && (
+        <aside className="rail">
+          <h2 className="rail-head">Start from a preset</h2>
+          <div className="rail-list">
+            {presets.map((p) => (
+              <button
+                key={p.name}
+                type="button"
+                className={p.name === presetName ? "preset active" : "preset"}
+                onClick={() => {
+                  // Load THIS preset's valid sample subject so it renders
+                  // out-of-the-box (a GitHub login isn't a Nitrotype handle).
+                  setOverrides({});
+                  setPublished(null);
+                  setPublishErr("");
+                  setPresetName(p.name);
+                  setSubject(p.defaultSubject);
+                }}
+              >
+                <span className="preset-title">{p.title}</span>
+                <span className="preset-desc">{p.description}</span>
+              </button>
+            ))}
+            {presets.length === 0 && <p className="muted">Loading presets…</p>}
+          </div>
+        </aside>
+      )}
 
       {/* ── Main column ─────────────────────────────────────────── */}
       <section className="stage">
-        <div className="preview-zone">
-          <div className="preview-bar">
-            <div
-              className="seg-toggle"
-              role="radiogroup"
-              aria-label="Preview mode"
-            >
-              <button
-                type="button"
-                role="radio"
-                aria-checked={variant === "light"}
-                className={variant === "light" ? "seg active" : "seg"}
-                onClick={() => setVariant("light")}
+        {/* Hidden render probe — drives shownSrc in BOTH tiers (basic preview
+            and the advanced canvas). Only a successful load swaps in, so a
+            bad handle / upstream error never shows a broken image (spec #6). */}
+        {pendingSrc && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={pendingSrc}
+            alt=""
+            style={{ display: "none" }}
+            onLoad={() => {
+              setShownSrc(pendingSrc);
+              setPreviewError(false);
+              setPreviewing(false);
+            }}
+            onError={() => {
+              setPreviewError(true);
+              setPreviewing(false);
+            }}
+          />
+        )}
+        {advanced && effectiveScene ? (
+          <CanvasEditor
+            scene={effectiveScene}
+            onScene={onSceneB2}
+            undo={history.undo}
+            redo={history.redo}
+            canUndo={history.canUndo}
+            canRedo={history.canRedo}
+            catalog={catalog}
+            metrics={meta?.metrics ?? []}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            previewSrc={shownSrc}
+            previewing={previewing}
+            previewError={previewError}
+            pageVariant={variant}
+            onPageVariant={setVariant}
+          />
+        ) : (
+          <>
+            <div className="preview-zone">
+              <div className="preview-bar">
+                <div
+                  className="seg-toggle"
+                  role="radiogroup"
+                  aria-label="Preview mode"
+                >
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={variant === "light"}
+                    className={variant === "light" ? "seg active" : "seg"}
+                    onClick={() => setVariant("light")}
+                  >
+                    ☀ Light
+                  </button>
+                  <button
+                    type="button"
+                    role="radio"
+                    aria-checked={variant === "dark"}
+                    className={variant === "dark" ? "seg active" : "seg"}
+                    onClick={() => setVariant("dark")}
+                  >
+                    ☾ Dark
+                  </button>
+                </div>
+                {previewing && <span className="muted small">rendering…</span>}
+              </div>
+              <div
+                className={
+                  variant === "light" ? "preview light" : "preview dark"
+                }
               >
-                ☀ Light
-              </button>
-              <button
-                type="button"
-                role="radio"
-                aria-checked={variant === "dark"}
-                className={variant === "dark" ? "seg active" : "seg"}
-                onClick={() => setVariant("dark")}
-              >
-                ☾ Dark
-              </button>
-            </div>
-            {previewing && <span className="muted small">rendering…</span>}
-          </div>
-          <div
-            className={variant === "light" ? "preview light" : "preview dark"}
-          >
-            {shownSrc ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={shownSrc} alt={`${presetName} preview`} />
-            ) : previewError ? (
-              <p className="preview-msg">
-                Couldn&apos;t render — check the handle.
+                {shownSrc ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={shownSrc} alt={`${presetName} preview`} />
+                ) : previewError ? (
+                  <p className="preview-msg">
+                    Couldn&apos;t render — check the handle.
+                  </p>
+                ) : (
+                  <div className="skeleton" />
+                )}
+              </div>
+              {previewError && shownSrc && (
+                <p className="muted small note">
+                  Couldn&apos;t render the latest change (check the handle) —
+                  showing the last good preview.
+                </p>
+              )}
+              <p className="muted small note">
+                Preview uses cached/sample data; the live embed pulls current
+                data.
               </p>
-            ) : (
-              <div className="skeleton" />
-            )}
-            {/* Hidden probe: only a successful load swaps into shownSrc, so a
-                bad handle / upstream error never shows a broken image. */}
-            {pendingSrc && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                src={pendingSrc}
-                alt=""
-                style={{ display: "none" }}
-                onLoad={() => {
-                  setShownSrc(pendingSrc);
-                  setPreviewError(false);
-                  setPreviewing(false);
-                }}
-                onError={() => {
-                  setPreviewError(true);
-                  setPreviewing(false);
-                }}
-              />
-            )}
-          </div>
-          {previewError && shownSrc && (
-            <p className="muted small note">
-              Couldn&apos;t render the latest change (check the handle) —
-              showing the last good preview.
-            </p>
-          )}
-          <p className="muted small note">
-            Preview uses cached/sample data; the live embed pulls current data.
-          </p>
-        </div>
+            </div>
 
-        {/* ── Control panel ─────────────────────────────────────── */}
-        <div className="panel">
-          <div className="knob-group">
-            <span className="legend">Subject</span>
-            <label className="knob">
-              <span className="knob-label">
-                {activePreset?.subjectKinds?.includes("user")
-                  ? "Your GitHub / Nitrotype handle"
-                  : "Subject"}
-              </span>
-              <input
-                className="knob-text"
-                type="text"
-                value={subject}
-                placeholder="your-handle"
-                onChange={(e) => setSubject(e.target.value.trim())}
-              />
-            </label>
-            <ThemePicker value={theme} onChange={setTheme} />
-          </div>
+            {/* ── Control panel ─────────────────────────────────────── */}
+            <div className="panel">
+              <div className="knob-group">
+                <span className="legend">Subject</span>
+                <label className="knob">
+                  <span className="knob-label">
+                    {activePreset?.subjectKinds?.includes("user")
+                      ? "Your GitHub / Nitrotype handle"
+                      : "Subject"}
+                  </span>
+                  <input
+                    className="knob-text"
+                    type="text"
+                    value={subject}
+                    placeholder="your-handle"
+                    onChange={(e) => setSubject(e.target.value.trim())}
+                  />
+                </label>
+                <ThemePicker value={theme} onChange={setTheme} />
+              </div>
 
-          {effectiveScene && (
-            <SchemaForm
-              scene={effectiveScene}
-              catalog={catalog}
-              onKnobChange={onKnobChange}
-            />
-          )}
-        </div>
+              {effectiveScene && (
+                <SchemaForm
+                  scene={effectiveScene}
+                  catalog={catalog}
+                  onKnobChange={onKnobChange}
+                />
+              )}
+            </div>
+          </>
+        )}
 
         {/* ── Output bar ────────────────────────────────────────── */}
         <div className="output">
@@ -388,6 +468,25 @@ export function Editor() {
           >
             {publishing ? "Publishing…" : "Publish →"}
           </button>
+          {advanced ? (
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setAdvanced(false)}
+              title="Return to the basic preset editor"
+            >
+              ← Basic
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="btn"
+              onClick={enterAdvanced}
+              title="Open the full canvas — add, move, anchor, and bind elements"
+            >
+              Advanced canvas →
+            </button>
+          )}
           {tier && <span className="muted small">encoding: {tier}</span>}
         </div>
         {snippet && (
