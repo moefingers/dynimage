@@ -15,6 +15,13 @@
       "when": 1781741762532,
       "tag": "0001_assets",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1781742203141,
+      "tag": "0002_reports_moderation",
+      "breakpoints": true
     }
   ]
 }
