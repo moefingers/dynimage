@@ -199,3 +199,23 @@ export const usageLedger = pgTable(
     index("usage_ledger_owner_idx").on(t.ownerId),
   ],
 );
+
+// Uploaded assets (§10) — builder-2's lane; schema owned here. The
+// logo/image element's uploaded-asset source. Bytes live in Vercel Blob;
+// this row is the entity. Raster-only v1 (mime allowlist + size cap enforced
+// at the upload route). genId id + owner cascade, mirroring published_embeds.
+export const assets = pgTable(
+  "assets",
+  {
+    id: text("id").primaryKey(),
+    ownerId: text("owner_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
+    mime: text("mime").notNull(),
+    size: integer("size").notNull(), // bytes
+    blobUrl: text("blob_url").notNull(), // public Vercel Blob URL
+    blobPathname: text("blob_pathname").notNull(), // for delete
+    createdAt: timestamp("created_at").notNull().defaultNow(),
+  },
+  (t) => [index("assets_owner_idx").on(t.ownerId)],
+);
