@@ -17,11 +17,10 @@ export type ControlKind =
   | "toggle"
   | "treatment";
 
-// Basic-tier groups only (editor-b1-ux-spec §3: "basic shows only these").
-// Subject + Theme are owned by the Editor shell. Structural / fine-tune
-// knobs (points, radius, per-element scale, durations, icosa/verts/rim,
-// raw opacities) are ADVANCED → hidden in B1, surfaced in B2's canvas.
-export type ControlGroup = "Text" | "Color" | "Animation";
+// B1 shows only Text/Color/Animation (editor-b1-ux-spec §3). B2's inspector
+// (advanced=true) also surfaces "Style" — the structural/fine-tune knobs B1
+// hides (points, radius, scale, durations, icosa/verts/rim, opacities).
+export type ControlGroup = "Text" | "Color" | "Animation" | "Style";
 
 export type ControlSpec = {
   key: string;
@@ -74,10 +73,14 @@ function isColor(key: string, s: JsonSchema): boolean {
   return false;
 }
 
-// Returns null for knobs that should NOT appear in the basic-tier form.
+// Map a knob's schema to a control. In BASIC (advanced=false) the structural
+// knobs return null (B1 hides them); in ADVANCED (B2 inspector) they map to
+// the "Style"/"Animation" groups. Returns null only for truly unsupported
+// shapes (arrays/objects) and the transform keys (handled by Transform).
 export function controlFor(
   key: string,
   schema: JsonSchema,
+  advanced = false,
 ): ControlSpec | null {
   if (HIDDEN_KEYS.has(key)) return null;
 
@@ -91,9 +94,6 @@ export function controlFor(
     return { key, kind: "color", label, help, group: "Color" };
   }
 
-  // Enum → treatment (curated palette) / segmented (≤4) / select (>4).
-  // Basic tier exposes treatment (Animation) + text align/weight (Text);
-  // other enums (e.g. logo icon) are preset-defined / advanced.
   if (opts) {
     if (key === "treatment") {
       return {
@@ -115,34 +115,39 @@ export function controlFor(
         options: opts,
       };
     }
-    return null; // advanced enum
+    if (!advanced) return null; // other enums hidden in basic
+    return {
+      key,
+      kind: opts.length <= 4 ? "segmented" : "select",
+      label,
+      help,
+      group: "Style",
+      options: opts,
+    };
   }
 
   if (t === "boolean") {
-    // Named motion toggles are basic (Animation); structural toggles
-    // (icosa/verts/rim/softenCenter/mono) are advanced.
     const motion = /^(breathe|countUp|wash|hueRotate|shimmer|pulse|glow)$/.test(
       key,
     );
-    return motion
-      ? { key, kind: "toggle", label, help, group: "Animation" }
-      : null;
+    if (motion) return { key, kind: "toggle", label, help, group: "Animation" };
+    if (!advanced) return null;
+    return { key, kind: "toggle", label, help, group: "Style" };
   }
 
   if (t === "number" || t === "integer") {
-    // Only the text `size` is basic; structural numbers (points, radius,
-    // scale, durations, opacities, gap) are advanced.
-    if (key !== "size") return null;
+    if (key !== "size" && !advanced) return null;
     const min = schema.minimum ?? schema.exclusiveMinimum;
     const max = schema.maximum ?? schema.exclusiveMaximum;
     const step = schema.multipleOf ?? (t === "integer" ? 1 : undefined);
     const hasRange = typeof min === "number" && typeof max === "number";
+    const motion = /dur|speed|delay/i.test(key);
     return {
       key,
       kind: hasRange ? "slider" : "stepper",
       label,
       help,
-      group: "Text",
+      group: key === "size" ? "Text" : motion ? "Animation" : "Style",
       min: typeof min === "number" ? min : undefined,
       max: typeof max === "number" ? max : undefined,
       step,
@@ -160,9 +165,13 @@ export function controlFor(
     };
   }
 
-  // Unknown / unsupported (arrays, objects like tile-grid.tiles) — omit from
-  // the basic form (B2 / preset-defined).
+  // Unknown / unsupported (arrays, objects like tile-grid.tiles).
   return null;
 }
 
-export const GROUP_ORDER: ControlGroup[] = ["Text", "Color", "Animation"];
+export const GROUP_ORDER: ControlGroup[] = [
+  "Text",
+  "Color",
+  "Animation",
+  "Style",
+];
