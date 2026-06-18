@@ -236,8 +236,8 @@ export function Editor() {
 
   // B2 commit: push a scene mutation onto undo history (+ optional selection).
   const onSceneB2 = useCallback(
-    (s: Scene, selectId?: string | null) => {
-      history.set(s);
+    (s: Scene, selectId?: string | null, coalesceKey?: string) => {
+      history.set(s, coalesceKey);
       if (selectId !== undefined) setSelectedId(selectId);
     },
     [history],

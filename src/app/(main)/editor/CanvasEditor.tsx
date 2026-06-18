@@ -7,7 +7,12 @@ import { LayersPanel } from "./LayersPanel";
 import { Canvas } from "./Canvas";
 import { Inspector } from "./Inspector";
 import { ThemePicker } from "./controls";
-import { removeElement, setCanvasTheme } from "./canvas-helpers";
+import {
+  removeElement,
+  setCanvasTheme,
+  patchTransform,
+  setAnchor,
+} from "./canvas-helpers";
 
 // B2 canvas editor — composes Layers · Canvas · Inspector and owns the
 // canvas-global keyboard (undo/redo + delete). Scene state + history live in
@@ -32,7 +37,7 @@ export function CanvasEditor({
   onPageVariant,
 }: {
   scene: Scene;
-  onScene: (s: Scene, selectId?: string | null) => void;
+  onScene: (s: Scene, selectId?: string | null, coalesceKey?: string) => void;
   undo: () => void;
   redo: () => void;
   canUndo: boolean;
@@ -47,8 +52,10 @@ export function CanvasEditor({
   pageVariant: "dark" | "light";
   onPageVariant: (v: "dark" | "light") => void;
 }) {
-  // Global canvas keyboard: undo/redo + delete selected (ignore when typing
-  // in a field, so inspector inputs keep their own backspace/etc).
+  // Global canvas keyboard: undo/redo + delete + arrow-nudge of the selected
+  // element. Global (not on the canvas div) so it works whichever panel has
+  // focus — e.g. nudging right after selecting in the Layers list. Ignored
+  // while typing in a field so inspector inputs keep their own keys.
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       const tag = (e.target as HTMLElement)?.tagName;
@@ -65,11 +72,9 @@ export function CanvasEditor({
         redo();
         return;
       }
-      if (
-        !typing &&
-        (e.key === "Delete" || e.key === "Backspace") &&
-        selectedId
-      ) {
+      if (typing || !selectedId) return;
+
+      if (e.key === "Delete" || e.key === "Backspace") {
         e.preventDefault();
         const els = scene.elements as ElementSpec[];
         const hasChildren = els.some((c) => c.anchor?.to === selectedId);
@@ -81,6 +86,40 @@ export function CanvasEditor({
         )
           return;
         onScene(removeElement(scene, selectedId), null);
+        return;
+      }
+
+      const step = e.shiftKey ? 10 : 1;
+      const dx =
+        e.key === "ArrowLeft" ? -step : e.key === "ArrowRight" ? step : 0;
+      const dy = e.key === "ArrowUp" ? -step : e.key === "ArrowDown" ? step : 0;
+      if (dx === 0 && dy === 0) return;
+      e.preventDefault();
+      const el = (scene.elements as ElementSpec[]).find(
+        (x) => x.id === selectedId,
+      );
+      if (!el) return;
+      // Nudge coalesces into one undo entry per burst (same key + quick).
+      const key = `${selectedId}.nudge`;
+      if (el.anchor) {
+        onScene(
+          setAnchor(scene, el.id, {
+            ...el.anchor,
+            dx: (el.anchor.dx ?? 0) + dx,
+            dy: (el.anchor.dy ?? 0) + dy,
+          }),
+          undefined,
+          key,
+        );
+      } else {
+        onScene(
+          patchTransform(scene, el.id, {
+            x: (el.transform?.x ?? 0) + dx,
+            y: (el.transform?.y ?? 0) + dy,
+          }),
+          undefined,
+          key,
+        );
       }
     };
     window.addEventListener("keydown", onKey);
@@ -153,7 +192,7 @@ export function CanvasEditor({
           previewError={previewError}
           selectedId={selectedId}
           onSelect={onSelect}
-          onScene={(s) => onScene(s)}
+          onScene={onScene}
           pageVariant={pageVariant}
         />
         <Inspector
@@ -161,7 +200,7 @@ export function CanvasEditor({
           selectedId={selectedId}
           catalog={catalog}
           metrics={metrics}
-          onScene={(s) => onScene(s)}
+          onScene={onScene}
         />
       </div>
     </div>

@@ -54,7 +54,8 @@ export function Inspector({
   selectedId: string | null;
   catalog: Map<string, ElementMetaEntry>;
   metrics: MetricEntry[];
-  onScene: (s: Scene) => void;
+  // coalesceKey collapses rapid edits to the same field into one undo entry.
+  onScene: (s: Scene, selectId?: string | null, coalesceKey?: string) => void;
 }) {
   const el = (scene.elements as ElementSpec[]).find((e) => e.id === selectedId);
   if (!el) {
@@ -105,7 +106,11 @@ export function Inspector({
               min={-4096}
               max={4096}
               onChange={(n) =>
-                onScene(setAnchor(scene, el.id, { ...el.anchor!, dx: n }))
+                onScene(
+                  setAnchor(scene, el.id, { ...el.anchor!, dx: n }),
+                  undefined,
+                  `${el.id}.dx`,
+                )
               }
             />
             <NumField
@@ -114,7 +119,11 @@ export function Inspector({
               min={-4096}
               max={4096}
               onChange={(n) =>
-                onScene(setAnchor(scene, el.id, { ...el.anchor!, dy: n }))
+                onScene(
+                  setAnchor(scene, el.id, { ...el.anchor!, dy: n }),
+                  undefined,
+                  `${el.id}.dy`,
+                )
               }
             />
           </div>
@@ -125,14 +134,26 @@ export function Inspector({
               value={t.x}
               min={-4096}
               max={4096}
-              onChange={(n) => onScene(patchTransform(scene, el.id, { x: n }))}
+              onChange={(n) =>
+                onScene(
+                  patchTransform(scene, el.id, { x: n }),
+                  undefined,
+                  `${el.id}.x`,
+                )
+              }
             />
             <NumField
               label="y"
               value={t.y}
               min={-4096}
               max={4096}
-              onChange={(n) => onScene(patchTransform(scene, el.id, { y: n }))}
+              onChange={(n) =>
+                onScene(
+                  patchTransform(scene, el.id, { y: n }),
+                  undefined,
+                  `${el.id}.y`,
+                )
+              }
             />
           </div>
         )}
@@ -142,14 +163,26 @@ export function Inspector({
             value={t.w}
             min={1}
             max={4096}
-            onChange={(n) => onScene(patchTransform(scene, el.id, { w: n }))}
+            onChange={(n) =>
+              onScene(
+                patchTransform(scene, el.id, { w: n }),
+                undefined,
+                `${el.id}.w`,
+              )
+            }
           />
           <NumField
             label="h"
             value={t.h}
             min={1}
             max={4096}
-            onChange={(n) => onScene(patchTransform(scene, el.id, { h: n }))}
+            onChange={(n) =>
+              onScene(
+                patchTransform(scene, el.id, { h: n }),
+                undefined,
+                `${el.id}.h`,
+              )
+            }
           />
         </div>
         <div className="num-row">
@@ -158,7 +191,13 @@ export function Inspector({
             value={t.z}
             min={0}
             max={99}
-            onChange={(n) => onScene(patchTransform(scene, el.id, { z: n }))}
+            onChange={(n) =>
+              onScene(
+                patchTransform(scene, el.id, { z: n }),
+                undefined,
+                `${el.id}.z`,
+              )
+            }
           />
           <NumField
             label="rotate"
@@ -166,7 +205,11 @@ export function Inspector({
             min={-360}
             max={360}
             onChange={(n) =>
-              onScene(patchTransform(scene, el.id, { rotate: n }))
+              onScene(
+                patchTransform(scene, el.id, { rotate: n }),
+                undefined,
+                `${el.id}.rotate`,
+              )
             }
           />
         </div>
@@ -245,7 +288,13 @@ export function Inspector({
               key={r.key}
               spec={r.spec!}
               value={(el.knobs ?? {})[r.key]}
-              onChange={(v) => onScene(setKnob(scene, el.id, r.key, v))}
+              onChange={(v) =>
+                onScene(
+                  setKnob(scene, el.id, r.key, v),
+                  undefined,
+                  `${el.id}.k.${r.key}`,
+                )
+              }
             />
           ))}
         </fieldset>
@@ -263,7 +312,7 @@ function BindEditor({
   scene: Scene;
   el: ElementSpec;
   metrics: MetricEntry[];
-  onScene: (s: Scene) => void;
+  onScene: (s: Scene, selectId?: string | null, coalesceKey?: string) => void;
 }) {
   const bind = el.bind;
   const provider = bind && "provider" in bind ? bind.provider : "";
@@ -324,6 +373,8 @@ function BindEditor({
                   provider: "literal",
                   value: e.target.value,
                 }),
+                undefined,
+                `${el.id}.bind.value`,
               )
             }
           />
@@ -346,6 +397,8 @@ function BindEditor({
                     subject: { kind: subjectKind, id: e.target.value.trim() },
                     metric,
                   }),
+                  undefined,
+                  `${el.id}.bind.subject`,
                 )
               }
             />
