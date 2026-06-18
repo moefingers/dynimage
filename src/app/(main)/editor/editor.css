@@ -437,9 +437,14 @@
 }
 .b2-grid {
   display: grid;
-  grid-template-columns: 220px 1fr 280px;
+  /* minmax(0,1fr) so the canvas column can shrink below the preview img's
+     intrinsic size instead of collapsing the track; width:100% so the grid
+     fills the viewport (else the 1fr resolves against a content-collapsed
+     container → the canvas rendered at ~0px). */
+  grid-template-columns: 220px minmax(0, 1fr) 280px;
   gap: 12px;
   align-items: start;
+  width: 100%;
 }
 
 /* Layers */

@@ -290,7 +290,7 @@ export function Editor() {
   }, [published]);
 
   return (
-    <div className="editor">
+    <div className={advanced ? "editor advanced" : "editor"}>
       {/* ── Preset rail (basic tier only) ──────────────────────── */}
       {!advanced && (
         <aside className="rail">
