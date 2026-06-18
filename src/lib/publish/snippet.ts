@@ -1,9 +1,19 @@
 // ─────────────────────────────────────────────────────────────────────
-// Embed snippet (spec §8, funnel §2 stage 8). A full <a>-wrapped
-// <picture> with a prefers-color-scheme theme split and a stable
-// cache-bust. The permanent URL carries NO ?v= (that's the transient
-// owner-triggered refresh) — only ?theme= for the split and ?cb= for
-// camo freshness, which is stable per publish so the embed URL is stable.
+// Embed snippet (spec §8, funnel §2 stage 8). A single <a>-wrapped <img>
+// at the published config's chosen theme + a stable cache-bust.
+//
+// Design §3 is FIXED-CHOSEN-THEME, not adaptive: the user picks a theme in
+// the editor and it's baked into the stored config (canvas.theme), so the
+// embed must render THAT theme — not a prefers-color-scheme dark/light
+// split that would override the user's choice. We therefore emit the bare
+// /i/<id> URL with NO ?theme= (the stored theme is authoritative; appending
+// ?theme= could override it). The permanent URL also carries NO ?v= (that's
+// the transient owner-triggered refresh) — only ?cb= for camo freshness,
+// stable per publish.
+//
+// The per-(id,theme) render machinery (render-embed.ts) is intentionally
+// kept for ?theme= overrides + a future Adaptive option (design backlog);
+// this snippet just doesn't emit a theme.
 // ─────────────────────────────────────────────────────────────────────
 
 export type SnippetOptions = {
@@ -12,12 +22,10 @@ export type SnippetOptions = {
   baseUrl: string;
   /** image format the snippet points at (svg keeps vector + animation). */
   format?: string;
-  /** alt text on the fallback <img>. */
+  /** alt text on the <img>. */
   alt?: string;
   /** <a> target. Defaults to the app origin. */
   href?: string;
-  /** theme names for the dark/light split. */
-  themes?: { dark: string; light: string };
   /** stable cache-bust token (e.g. publish/update epoch in base36). */
   cb?: string;
 };
@@ -30,7 +38,11 @@ function esc(s: string): string {
     .replace(/"/g, "&quot;");
 }
 
-/** Build the embed URL for a given theme (theme omitted → fallback img). */
+/**
+ * Build the embed image URL. `theme` is optional and normally OMITTED for
+ * the published snippet (the stored config theme is authoritative); it
+ * exists for ?theme= overrides / future Adaptive callers.
+ */
 export function embedUrl(o: {
   baseUrl: string;
   id: string;
@@ -47,19 +59,14 @@ export function embedUrl(o: {
 
 export function buildSnippet(o: SnippetOptions): string {
   const format = o.format ?? "svg";
-  const themes = o.themes ?? { dark: "dark", light: "light" };
   const alt = esc(o.alt ?? "dynimage embed");
   const href = esc(o.href ?? o.baseUrl);
-  const u = (theme?: string) =>
-    esc(embedUrl({ baseUrl: o.baseUrl, id: o.id, format, theme, cb: o.cb }));
+  // No theme= — the stored config theme renders by default.
+  const src = esc(embedUrl({ baseUrl: o.baseUrl, id: o.id, format, cb: o.cb }));
 
   return [
     `<a href="${href}">`,
-    `  <picture>`,
-    `    <source media="(prefers-color-scheme: dark)" srcset="${u(themes.dark)}" />`,
-    `    <source media="(prefers-color-scheme: light)" srcset="${u(themes.light)}" />`,
-    `    <img src="${u()}" alt="${alt}" />`,
-    `  </picture>`,
+    `  <img src="${src}" alt="${alt}" />`,
     `</a>`,
   ].join("\n");
 }

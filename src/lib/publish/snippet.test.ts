@@ -4,7 +4,8 @@ import { buildSnippet, embedUrl } from "./snippet.ts";
 
 const BASE = "https://dynimage.vercel.app";
 
-test("embedUrl builds /i/<id>.<fmt> with theme + cb query", () => {
+test("embedUrl builds /i/<id>.<fmt>, omitting empty theme/cb", () => {
+  // theme is supported (overrides / future Adaptive) but normally omitted
   assert.equal(
     embedUrl({
       baseUrl: BASE,
@@ -15,44 +16,40 @@ test("embedUrl builds /i/<id>.<fmt> with theme + cb query", () => {
     }),
     `${BASE}/i/abc.svg?theme=dark&cb=z9`,
   );
-  // no theme, no cb → bare URL (the <img> fallback)
+  assert.equal(
+    embedUrl({ baseUrl: BASE, id: "abc", format: "svg", cb: "z9" }),
+    `${BASE}/i/abc.svg?cb=z9`,
+  );
   assert.equal(
     embedUrl({ baseUrl: BASE, id: "abc", format: "svg" }),
     `${BASE}/i/abc.svg`,
   );
 });
 
-test("buildSnippet wraps a theme-split <picture> in an <a>", () => {
+test("buildSnippet emits a single themed <a><img> — no <picture>, no theme=", () => {
   const s = buildSnippet({ id: "Xy_9-Z", baseUrl: BASE, cb: "abc" });
   assert.match(s, /^<a href="https:\/\/dynimage\.vercel\.app">/);
-  assert.match(s, /<picture>/);
-  assert.match(
-    s,
-    /<source media="\(prefers-color-scheme: dark\)" srcset="[^"]*theme=dark[^"]*" \/>/,
+  assert.ok(!/<picture>/.test(s), "no <picture> split");
+  assert.ok(!/<source/.test(s), "no media <source>s");
+  assert.ok(
+    !/theme=/.test(s),
+    "the stored config theme is authoritative — never append ?theme=",
   );
   assert.match(
     s,
-    /<source media="\(prefers-color-scheme: light\)" srcset="[^"]*theme=light[^"]*" \/>/,
+    /^<a href="[^"]+">\n  <img src="[^"]*\/i\/Xy_9-Z\.svg\?cb=abc" alt="dynimage embed" \/>\n<\/a>$/,
   );
-  assert.match(
-    s,
-    /<img src="[^"]*\/i\/Xy_9-Z\.svg\?cb=abc" alt="dynimage embed" \/>/,
-  );
-  assert.match(s, /<\/picture>\n<\/a>$/);
 });
 
-test("buildSnippet honors href, alt, and custom themes", () => {
+test("buildSnippet honors href and alt", () => {
   const s = buildSnippet({
     id: "id1",
     baseUrl: BASE,
     href: "https://github.com/moefingers",
-    alt: "moefingers' commits",
-    themes: { dark: "ember", light: "rose" },
+    alt: "commits-orbit — dynimage",
   });
   assert.match(s, /<a href="https:\/\/github\.com\/moefingers">/);
-  assert.match(s, /theme=ember/);
-  assert.match(s, /theme=rose/);
-  assert.match(s, /alt="moefingers&#39;? commits"|alt="moefingers' commits"/);
+  assert.match(s, /alt="commits-orbit — dynimage"/);
 });
 
 test("buildSnippet escapes HTML-significant chars in alt/href", () => {

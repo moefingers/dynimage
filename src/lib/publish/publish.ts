@@ -45,14 +45,6 @@ export type PublishResult = {
   exposesPrivateData: boolean;
 };
 
-// The exact variants the snippet emits — the dark/light <source>s AND the
-// bare <img> fallback (no theme). Pre-warm covers all three so the first
-// camo fetch of ANY snippet URL is a cache hit.
-const PREWARM_VARIANTS: ReadonlyArray<string | undefined> = [
-  undefined,
-  "dark",
-  "light",
-];
 const ID_RETRIES = 4;
 
 export async function publishEmbed(args: PublishArgs): Promise<PublishResult> {
@@ -85,22 +77,21 @@ export async function publishEmbed(args: PublishArgs): Promise<PublishResult> {
     throw new PublishError("Could not allocate a unique embed id.");
   }
 
-  // Pre-warm BEFORE the url is handed back. Best-effort (allSettled): a
-  // warm failure must not fail publish — the row is committed, so the embed
-  // resolves; hit #1 just renders on demand instead of from cache.
-  await Promise.allSettled(
-    PREWARM_VARIANTS.map((theme) =>
-      renderEmbed({
-        id,
-        scene,
-        ownerId: args.ownerId,
-        format: "svg",
-        theme: theme ?? null,
-        baseUrl: args.baseUrl,
-        waitUntil: args.waitUntil,
-      }),
-    ),
-  );
+  // Pre-warm BEFORE the url is handed back, for the single variant the
+  // snippet emits — the bare /i/<id>.svg (no theme), which renders the
+  // config's baked canvas.theme. Best-effort: a warm failure must not fail
+  // publish — the row is committed, so the embed resolves; hit #1 just
+  // renders on demand instead of from cache. (The per-(id,theme) machinery
+  // still covers ?theme= overrides; they warm lazily on first request.)
+  await renderEmbed({
+    id,
+    scene,
+    ownerId: args.ownerId,
+    format: "svg",
+    theme: null,
+    baseUrl: args.baseUrl,
+    waitUntil: args.waitUntil,
+  }).catch(() => {});
 
   // Stable per-publish cache-bust (base36 epoch). Re-publishing/editing
   // produces a new cb so camo refreshes; it is NOT the transient ?v=.
