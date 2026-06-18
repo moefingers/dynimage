@@ -212,7 +212,7 @@ const renderSvg: CardRenderer<Data> = async ({
     </g>
   </g>
 
-  <text class="tag"   x="${width / 2}" y="42" text-anchor="middle">A SUITE OF SERVICES · BROUGHT TOGETHER</text>
+  <text class="tag"   x="${width / 2}" y="42" text-anchor="middle">THE SITE THEY SEE · THE SOFTWARE BEHIND IT</text>
   <text class="brand" x="${width / 2}" y="92" text-anchor="middle">Recanon</text>
 
   ${tileEls}
