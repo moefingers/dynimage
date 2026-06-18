@@ -3,6 +3,10 @@ import { Scene } from "@/lib/scene/scene-spec";
 import { getPublishedEmbed } from "@/lib/publish/store";
 import { renderEmbed } from "@/lib/publish/render-embed";
 import { parseEmbedPath } from "@/lib/publish/path";
+import {
+  disabledPlaceholderSvg,
+  placeholderSize,
+} from "@/lib/publish/placeholder";
 
 // ─────────────────────────────────────────────────────────────────────
 // Permanent embed endpoint (spec §8). GET /i/<id>[.ext] → resolve the
@@ -38,10 +42,25 @@ export async function GET(
   const { id, format } = parsed;
 
   const row = await getPublishedEmbed(id);
-  // 404 for missing OR disabled (moderation §11). Identical response so a
-  // disabled id is indistinguishable from a never-existed one.
-  if (!row || row.disabled) {
+  // Missing id → 404, indistinguishable from never-existed (an unguessable
+  // id that isn't found reveals nothing).
+  if (!row) {
     return new Response("Embed not found.", { status: 404 });
+  }
+  // Disabled (moderation §11) → 410 Gone with a NEUTRAL placeholder, not the
+  // original and not an error. 410 signals known-gone so camo drops it
+  // sooner; the short max-age lets it re-fetch and stop serving the removed
+  // embed. Sized to the original canvas so the README layout doesn't shift.
+  if (row.disabled) {
+    const { w, h } = placeholderSize(row.config);
+    return new Response(disabledPlaceholderSvg(w, h), {
+      status: 410,
+      headers: {
+        "Content-Type": "image/svg+xml; charset=utf-8",
+        "Cache-Control": "public, max-age=60",
+        "X-Embed-Disabled": "1",
+      },
+    });
   }
 
   // The config was validated at publish time; re-validate defensively. A
