@@ -49,6 +49,9 @@ export async function GET() {
     runtime: el.runtime,
     defaultSize: el.defaultSize,
     bind: el.bind,
+    // Asset affinity (spec §10) — the editor shows the uploaded-asset
+    // picker only for accepting elements. Default not-accepting.
+    asset: el.asset ?? { accepts: false },
     slots: [...GEOMETRIC_SLOTS, ...Object.keys(el.slots ?? {})].filter(
       (s, i, a) => a.indexOf(s) === i,
     ),
