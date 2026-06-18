@@ -102,6 +102,8 @@ export function Inspector({
             <NumField
               label="off x"
               value={el.anchor!.dx ?? 0}
+              min={-4096}
+              max={4096}
               onChange={(n) =>
                 onScene(setAnchor(scene, el.id, { ...el.anchor!, dx: n }))
               }
@@ -109,6 +111,8 @@ export function Inspector({
             <NumField
               label="off y"
               value={el.anchor!.dy ?? 0}
+              min={-4096}
+              max={4096}
               onChange={(n) =>
                 onScene(setAnchor(scene, el.id, { ...el.anchor!, dy: n }))
               }
@@ -119,11 +123,15 @@ export function Inspector({
             <NumField
               label="x"
               value={t.x}
+              min={-4096}
+              max={4096}
               onChange={(n) => onScene(patchTransform(scene, el.id, { x: n }))}
             />
             <NumField
               label="y"
               value={t.y}
+              min={-4096}
+              max={4096}
               onChange={(n) => onScene(patchTransform(scene, el.id, { y: n }))}
             />
           </div>
@@ -148,6 +156,8 @@ export function Inspector({
           <NumField
             label="z"
             value={t.z}
+            min={0}
+            max={99}
             onChange={(n) => onScene(patchTransform(scene, el.id, { z: n }))}
           />
           <NumField
