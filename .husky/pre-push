@@ -1,1 +1,90 @@
+# Pre-push: gate the deploy unit on a clean `pnpm build` — but SKIP the build when
+# the push touches NO code: every changed path is non-code (docs/images/pdf/…, per
+# the shared allowlist in .husky/lib/non-code-paths.sh). Productizes the manual
+# `git push --no-verify` for such pushes (which was error-prone — it could skip a
+# real code build) so the skip is automatic AND safe. Any code in the diff still
+# gates exactly as before. (OUT-249; generalized from docs-only to non-code-only)
+#
+# Uses the git pre-push STDIN protocol — one line per pushed ref:
+#   <local ref> <local sha> <remote ref> <remote sha>
+# A brand-new branch (no upstream yet) has an all-zero <remote sha>; we fall back
+# to the merge-base with origin/main so we diff only THIS branch's commits. A
+# branch DELETE has an all-zero <local sha> — nothing is pushed to build, so a
+# delete-only push skips too (never falls through to the fail-safe build).
+# FAIL SAFE: any uncertainty about the diff scope -> run the build, never skip.
+
+# Shared "is every path non-code?" allowlist — the ONE source of truth both hooks
+# use (pre-commit sources it too). Missing/unreadable -> build (fail safe).
+. "$(dirname "$0")/lib/non-code-paths.sh" 2>/dev/null || {
+  echo "[pre-push] cannot load non-code allowlist — building to be safe."
+  pnpm build
+  exit $?
+}
+
+ZERO="0000000000000000000000000000000000000000"
+must_build=0
+saw_ref=0
+saw_delete=0
+all_files=""
+
+while read -r local_ref local_sha remote_ref remote_sha; do
+  # Branch deletion (all-zero local sha) — nothing is being pushed to build. Record
+  # it so an all-deletes push skips the build instead of hitting the "no refs" build.
+  if [ "$local_sha" = "$ZERO" ]; then
+    saw_delete=1
+    continue
+  fi
+  saw_ref=1
+
+  if [ "$remote_sha" = "$ZERO" ]; then
+    # New branch on the remote — no upstream. Diff from the merge-base with
+    # origin/main so we see only this branch's changes, not all of main's history.
+    # `|| true` so a merge-base failure can't abort the hook under husky's `sh -e`
+    # — an empty base falls through to the fail-safe build below.
+    base=$(git merge-base "$local_sha" origin/main 2>/dev/null || true)
+  else
+    base="$remote_sha"
+  fi
+
+  # Couldn't establish a base -> can't prove docs-only -> build (fail safe).
+  if [ -z "$base" ]; then
+    must_build=1
+    break
+  fi
+
+  files=$(git diff --name-only "$base" "$local_sha" 2>/dev/null) || { must_build=1; break; }
+  all_files="$all_files
+$files"
+done
+
+# Delete-only push (every ref was a branch delete, nothing pushed) -> no build unit.
+# Must come BEFORE the "no refs -> build" fail-safe, which delete-only would trip.
+if [ "$saw_ref" = "0" ] && [ "$saw_delete" = "1" ] && [ "$must_build" = "0" ]; then
+  echo "[pre-push] branch-delete-only push — nothing to build, skipping."
+  exit 0
+fi
+
+# No refs parsed (unexpected invocation) or any uncertainty -> build to be safe.
+if [ "$saw_ref" = "0" ] || [ "$must_build" = "1" ]; then
+  echo "[pre-push] building web/ (code path or undetermined diff)…"
+  pnpm build
+  exit $?
+fi
+
+# Strip blanks; if the diff base resolved to nothing, don't trust a "skip" — build.
+stripped=$(printf '%s\n' "$all_files" | sed '/^$/d')
+if [ -z "$stripped" ]; then
+  echo "[pre-push] no changed files detected — building to be safe."
+  pnpm build
+  exit $?
+fi
+
+# Non-code-only iff EVERY changed path is allowlisted (docs/images/pdf/…). The
+# shared allowlist is the single source of truth; .json/.yaml/.lock count as code.
+if all_non_code "$stripped"; then
+  echo "[pre-push] non-code-only push (docs/images/pdf) — skipping pnpm build."
+  exit 0
+fi
+
+echo "[pre-push] code in the push diff — building web/…"
 pnpm build
