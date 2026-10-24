@@ -17,6 +17,80 @@ const DEFAULT_H = 320;
 // stroke and a slow hue-rotate for depth. Tiles overlay the lattice;
 // the title sits centered between the lattice center and the top edge.
 
+// The two lattice discs share one loop. Each turns a whole number of
+// times per loop at its own average speed, and its speed drifts with a
+// few harmonics of the loop, so the discs keep speeding up and easing
+// off against each other, then the loop restarts without a seam.
+const SPIN_LOOP_SEC = 90;
+
+type SpinHarmonic = { k: number; amp: number; phase: number };
+
+// SMIL rotation whose angular speed is
+//   ω(t) = ω̄ · (1 + Σ amp·sin(2π·k·t/T + phase))
+// with ω̄ = turns·360°/T. Every harmonic completes whole cycles in T, so
+// the speed at the end of the loop equals the speed at the start, and
+// the net angle ω̄·T is a whole number of turns: the repeat matches in
+// both position and speed. Σ|amp| < 1 keeps the disc turning one way.
+// The angle is sampled into keyframes and each segment gets the cubic
+// Hermite curve through its end angles and end speeds, written as
+// keySplines (control x at 1/3 and 2/3 makes time linear in the curve
+// parameter, so the spline is exactly that Hermite).
+function spinAnimation(
+  turns: number,
+  harmonics: SpinHarmonic[],
+  segments = 24,
+): string {
+  const T = SPIN_LOOP_SEC;
+  const mean = (turns * 360) / T;
+  const angle = (t: number) =>
+    mean * t -
+    mean *
+      harmonics.reduce(
+        (s, h) =>
+          s +
+          ((h.amp * T) / (2 * Math.PI * h.k)) *
+            (Math.cos((2 * Math.PI * h.k * t) / T + h.phase) -
+              Math.cos(h.phase)),
+        0,
+      );
+  const speed = (t: number) =>
+    mean *
+    (1 +
+      harmonics.reduce(
+        (s, h) => s + h.amp * Math.sin((2 * Math.PI * h.k * t) / T + h.phase),
+        0,
+      ));
+  const ts = Array.from({ length: segments + 1 }, (_, i) => (T * i) / segments);
+  const values = ts.map(angle);
+  const clamp01 = (v: number) => Math.min(1, Math.max(0, v));
+  const splines = ts.slice(0, -1).map((t0, i) => {
+    const t1 = ts[i + 1]!;
+    const h = t1 - t0;
+    const d = values[i + 1]! - values[i]!;
+    const y1 = clamp01((speed(t0) * h) / (3 * d));
+    const y2 = clamp01(1 - (speed(t1) * h) / (3 * d));
+    return `0.3333 ${y1.toFixed(4)} 0.6667 ${y2.toFixed(4)}`;
+  });
+  return `<animateTransform attributeName="transform" type="rotate"
+          values="${values.map((v) => v.toFixed(2)).join(";")}"
+          keyTimes="${ts.map((t) => (t / T).toFixed(4)).join(";")}"
+          calcMode="spline" keySplines="${splines.join("; ")}"
+          dur="${T}s" repeatCount="indefinite"/>`;
+}
+
+// Disc A (teal, front): one turn per loop, about 0.8–6°/s.
+const SPIN_A = spinAnimation(1, [
+  { k: 1, amp: 0.55, phase: 0 },
+  { k: 2, amp: 0.25, phase: 1.2 },
+]);
+// Disc B (grey, counter-rotating): two turns per loop, about 3–13°/s,
+// its fundamental half a cycle off A's so one surges while the other
+// eases.
+const SPIN_B = spinAnimation(-2, [
+  { k: 1, amp: 0.45, phase: Math.PI },
+  { k: 3, amp: 0.15, phase: 0.4 },
+]);
+
 const Input = z.object({
   user: z
     .string()
@@ -156,11 +230,6 @@ const renderSvg: CardRenderer<Data> = async ({
       .tSub  { font: 500 13px ui-sans-serif, system-ui, sans-serif; fill: ${theme.textMuted}; }
       .lattice-hue { animation: latHue 22s linear infinite; transform-origin: center; }
       @keyframes latHue { 0% { filter: hue-rotate(0deg); } 100% { filter: hue-rotate(360deg); } }
-      /* Counter-phased breathing now driven entirely by SMIL — see the
-         animateTransform pair on each lattice group below. CSS-driven
-         scale was abandoned because transform-box: fill-box still
-         picked up the SMIL-rotated bounding box, which expands during
-         the rotation cycle and shifted the apparent scale pivot. */
       .brand { opacity: 0; animation: fadeUp 700ms cubic-bezier(.2,.7,.2,1) 140ms both; }
       .tag   { opacity: 0; animation: fadeUp 700ms cubic-bezier(.2,.7,.2,1) 240ms both; }
       ${tileDelays}
@@ -170,44 +239,31 @@ const renderSvg: CardRenderer<Data> = async ({
 
   <rect width="${width}" height="${height}" rx="20" ry="20" fill="${theme.bg}" stroke="${theme.stroke}" stroke-width="1"/>
 
-  <!-- Brand lattice. Two layers — A spins one way, B (already offset
-       ~15° in the source) spins the other. Each layer also breathes
-       counter-phased with the other on a 14s loop.
+  <!-- Brand lattice. Two discs — A spins one way, B (already offset
+       ~15° in the source) spins the other, each at its own drifting
+       speed (see spinAnimation). They hold their size; only rotation
+       moves.
 
-       Critical nesting: the SMIL animateTransform's go on the OUTER
+       Critical nesting: the SMIL animateTransform goes on the OUTER
        <g>, and the path is wrapped by an INNER <g transform="translate
        (-150 -150)"> that shifts its native (150,150) center to the
        outer g's (0,0) BEFORE any animation applies. If the translate
-       were on the outer g instead, additive="sum" would stack the
-       rotate/scale AFTER the translate in the transform list — and
-       since SVG applies transforms right-to-left, the rotate would
-       happen first (around its own origin) and the translate would
-       drag the rotated geometry off-center each frame, making the
-       whole lattice orbit around the banner center instead of
-       staying put. -->
+       were on the outer g instead, the animated rotate would replace
+       it, and the lattice would spin around its own corner instead of
+       staying centered on the banner. -->
   <g class="lattice-hue" mask="url(#sLatticeMask)" opacity="0.85">
     <g transform="${latticeOuterTx}">
       <g>
         <g transform="translate(-150 -150)">
           <path d="${SYNDICATE_LATTICE_PATH_A}" fill="none" stroke="url(#sLatticeGrad)" stroke-width="1.4" stroke-linejoin="round"/>
         </g>
-        <animateTransform attributeName="transform" type="rotate"
-          values="0;360" dur="120s" repeatCount="indefinite" additive="sum"/>
-        <animateTransform attributeName="transform" type="scale"
-          values="1;0;1" keyTimes="0;0.5;1"
-          calcMode="spline" keySplines="0.42 0 0.58 1; 0.42 0 0.58 1"
-          dur="14s" repeatCount="indefinite" additive="sum"/>
+        ${SPIN_A}
       </g>
       <g>
         <g transform="translate(-150 -150)">
           <path d="${SYNDICATE_LATTICE_PATH_B}" fill="none" stroke="url(#sLatticeGradB)" stroke-width="1.4" stroke-linejoin="round"/>
         </g>
-        <animateTransform attributeName="transform" type="rotate"
-          values="360;0" dur="160s" repeatCount="indefinite" additive="sum"/>
-        <animateTransform attributeName="transform" type="scale"
-          values="0;1;0" keyTimes="0;0.5;1"
-          calcMode="spline" keySplines="0.42 0 0.58 1; 0.42 0 0.58 1"
-          dur="14s" repeatCount="indefinite" additive="sum"/>
+        ${SPIN_B}
       </g>
     </g>
   </g>
@@ -234,7 +290,7 @@ export const syndicateCard: Card<Input, Data> = {
   meta: {
     title: "Recanon — services CTA",
     description:
-      "Branded CTA built around the brand sacred-geometry lattice from recanon.com. Two counter-rotating layers of the intersecting-circles pattern with a slow hue-rotate, brand teal stroke, masked to keep the title legible. Three service tiles overlay. Optional focus= dims non-target tiles.",
+      "Branded CTA built around the brand sacred-geometry lattice from recanon.com. Two counter-rotating layers of the intersecting-circles pattern, each turning at its own drifting speed on a seamless loop, with a slow hue-rotate, brand teal stroke, masked to keep the title legible. Three service tiles overlay. Optional focus= dims non-target tiles.",
     dimensions: ["user"],
     supportsAnimation: true,
   },
