@@ -16,7 +16,7 @@ import {
   makeScene,
   buildKeyTimes,
 } from "./sphere-math";
-import { esc, fmtInt } from "./svg-helpers";
+import { esc, fmtInt, cardFrameOpen, cardFrameClose } from "./svg-helpers";
 import { brandIconAt, GITHUB_PATH, GITHUB_VB } from "./brand-icons";
 
 const DEFAULT_W = 1100;
@@ -249,7 +249,7 @@ const renderSvg: CardRenderer<Data> = async ({
       @keyframes cFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     </style>
   </defs>
-  <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#cBg)" stroke="${theme.stroke}" stroke-width="1"/>
+  ${cardFrameOpen("c", width, height, 18, "url(#cBg)")}
   <circle cx="${sphereCx}" cy="${sphereCy}" r="${SPHERE_R + 26}" fill="url(#cRim)"/>
   <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#cSheen)">
     <animateTransform attributeName="transform" type="translate" from="${-width} 0" to="${width} 0" dur="5.4s" repeatCount="indefinite"/>
@@ -263,6 +263,7 @@ const renderSvg: CardRenderer<Data> = async ({
   <text class="cLbl"  x="${panelX}" y="262">COMMITS · LAST YEAR</text>
   <text class="cLife" x="${panelX}" y="288">${fmtInt(data.lifetime.lifetimeCommits)} since ${data.lifetime.yearsRange.start} · all-time</text>
   <text class="cFoot" x="${width - 28}" y="${height - 18}" text-anchor="end">GITHUB · LIVE · DYNIMAGE</text>
+  ${cardFrameClose(width, height, 18, theme.stroke)}
 </svg>`,
   };
 };

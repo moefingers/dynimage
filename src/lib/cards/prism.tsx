@@ -6,7 +6,7 @@ import {
   type UserOverview,
   type UserContributions,
 } from "@/lib/data/atoms";
-import { esc, fmtInt } from "./svg-helpers";
+import { esc, fmtInt, cardFrameOpen, cardFrameClose } from "./svg-helpers";
 
 const DEFAULT_W = 1200;
 const DEFAULT_H = 240;
@@ -117,7 +117,7 @@ const renderSvg: CardRenderer<Data> = async ({
       @keyframes prFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     </style>
   </defs>
-  <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#prBg)" stroke="${theme.stroke}" stroke-width="1"/>
+  ${cardFrameOpen("pr", width, height, 18, "url(#prBg)")}
   <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#prSheen)">
     <animateTransform attributeName="transform" type="translate" from="${-width} 0" to="${width} 0" dur="4.4s" repeatCount="indefinite"/>
   </rect>
@@ -125,6 +125,7 @@ const renderSvg: CardRenderer<Data> = async ({
   <text class="prName" x="${titleX}" y="${titleY}">${esc(display)}</text>
   <text class="prSub"  x="${titleX}" y="${titleY + 28}">@${esc(data.overview.login)} · LIVE · GITHUB</text>
   ${cellEls}
+  ${cardFrameClose(width, height, 18, theme.stroke)}
 </svg>`,
   };
 };

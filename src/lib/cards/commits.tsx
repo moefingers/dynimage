@@ -7,7 +7,7 @@ import {
   type UserOverview,
   type UserContributions,
 } from "@/lib/data/atoms";
-import { esc, fmtInt } from "./svg-helpers";
+import { esc, fmtInt, cardFrameOpen, cardFrameClose } from "./svg-helpers";
 
 const DEFAULT_W = 480;
 const DEFAULT_H = 200;
@@ -93,7 +93,7 @@ const renderSvg: CardRenderer<Data> = async ({
       }
     </style>
   </defs>
-  <rect width="${width}" height="${height}" rx="14" ry="14" fill="url(#bg)" stroke="${theme.stroke}" stroke-width="1"/>
+  ${cardFrameOpen("commits", width, height, 14, "url(#bg)")}
   <rect width="${width}" height="${height}" rx="14" ry="14" fill="url(#sheen)">
     <animateTransform attributeName="transform" type="translate" from="${-width} 0" to="${width} 0" dur="3.2s" repeatCount="indefinite"/>
   </rect>
@@ -104,6 +104,7 @@ const renderSvg: CardRenderer<Data> = async ({
   <text class="label" x="32" y="130" text-anchor="start">${esc(label)}</text>
   <text class="sub" x="32" y="${height - 22}" text-anchor="start">${esc(sub)}</text>
   <text class="sub" x="${width - 22}" y="${height - 22}" text-anchor="end" opacity="0.6">@${esc(data.overview.login)}</text>
+  ${cardFrameClose(width, height, 14, theme.stroke)}
 </svg>`,
   };
 };

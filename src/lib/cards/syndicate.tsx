@@ -1,6 +1,6 @@
 import { z } from "zod";
 import type { Card, CardRenderer } from "./types";
-import { esc } from "./svg-helpers";
+import { esc, cardFrameOpen, cardFrameClose } from "./svg-helpers";
 import {
   SYNDICATE_LATTICE_PATH_A,
   SYNDICATE_LATTICE_PATH_B,
@@ -237,7 +237,7 @@ const renderSvg: CardRenderer<Data> = async ({
     </style>
   </defs>
 
-  <rect width="${width}" height="${height}" rx="20" ry="20" fill="${theme.bg}" stroke="${theme.stroke}" stroke-width="1"/>
+  ${cardFrameOpen("s", width, height, 20, theme.bg)}
 
   <!-- Brand lattice. Two discs — A spins one way, B (already offset
        ~15° in the source) spins the other, each at its own drifting
@@ -274,6 +274,7 @@ const renderSvg: CardRenderer<Data> = async ({
   ${tileEls}
 
   <text class="tag" x="${width - PAD}" y="${height - 8}" text-anchor="end" opacity="0.6">recanon.com · @${esc(data.user)}</text>
+  ${cardFrameClose(width, height, 20, theme.stroke)}
 </svg>`,
   };
 };

@@ -15,7 +15,7 @@ import {
   makeScene,
   buildKeyTimes,
 } from "./sphere-math";
-import { esc, fmtInt } from "./svg-helpers";
+import { esc, fmtInt, cardFrameOpen, cardFrameClose } from "./svg-helpers";
 
 const DEFAULT_W = 1200;
 const DEFAULT_H = 340;
@@ -289,7 +289,7 @@ const renderSvg: CardRenderer<Data> = async ({
       @keyframes hFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
     </style>
   </defs>
-  <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#hBg)" stroke="${theme.stroke}" stroke-width="1"/>
+  ${cardFrameOpen("h", width, height, 18, "url(#hBg)")}
   <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#hSheen)">
     <animateTransform attributeName="transform" type="translate" from="${-width} 0" to="${width} 0" dur="4.8s" repeatCount="indefinite"/>
   </rect>
@@ -299,6 +299,7 @@ const renderSvg: CardRenderer<Data> = async ({
   <text class="hSub"  x="${panelX}" y="84">${esc(panelSub)}</text>
   ${cellEls}
   <text class="foot" x="${width - 28}" y="${height - 16}" text-anchor="end">GITHUB · NITROTYPE · LIVE</text>
+  ${cardFrameClose(width, height, 18, theme.stroke)}
 </svg>`,
   };
 };

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ImageResponse } from "next/og";
 import type { Card, CardRenderer } from "./types";
-import { esc } from "./svg-helpers";
+import { esc, cardFrameOpen, cardFrameClose } from "./svg-helpers";
 
 const DEFAULT_W = 320;
 const DEFAULT_H = 80;
@@ -37,11 +37,12 @@ const renderSvg: CardRenderer<Data> = async ({
   return {
     contentType: "image/svg+xml; charset=utf-8",
     body: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(data.text)}">
-  <rect width="${width}" height="${height}" rx="14" ry="14" fill="${theme.bg}" stroke="${theme.stroke}" stroke-width="1"/>
+  ${cardFrameOpen("text", width, height, 14, theme.bg)}
   <text x="${x}" y="${height / 2}" text-anchor="${anchor}" dominant-baseline="middle"
         font-family="ui-sans-serif, system-ui, sans-serif"
         font-size="${data.size}" font-weight="${fontWeight}"
         fill="${theme.text}">${esc(data.text)}</text>
+  ${cardFrameClose(width, height, 14, theme.stroke)}
 </svg>`,
   };
 };

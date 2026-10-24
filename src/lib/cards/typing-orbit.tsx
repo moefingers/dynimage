@@ -9,7 +9,7 @@ import {
   makeScene,
   buildKeyTimes,
 } from "./sphere-math";
-import { esc, fmtInt } from "./svg-helpers";
+import { esc, fmtInt, cardFrameOpen, cardFrameClose } from "./svg-helpers";
 import { brandIconAt, NITROTYPE_PATH, NITROTYPE_VB } from "./brand-icons";
 
 const DEFAULT_W = 1100;
@@ -264,7 +264,7 @@ const renderSvg: CardRenderer<Data> = async ({
       @keyframes tFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     </style>
   </defs>
-  <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#toBg)" stroke="${theme.stroke}" stroke-width="1"/>
+  ${cardFrameOpen("to", width, height, 18, "url(#toBg)")}
   <circle cx="${sphereCx}" cy="${sphereCy}" r="${SPHERE_R + 26}" fill="url(#toRim)"/>
   <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#toSheen)">
     <animateTransform attributeName="transform" type="translate" from="${-width} 0" to="${width} 0" dur="5.4s" repeatCount="indefinite"/>
@@ -289,6 +289,7 @@ const renderSvg: CardRenderer<Data> = async ({
   <text class="tTier" x="320" y="${height - 32}">${esc(tierLabel(r.leagueTier))}</text>
 
   <text class="tFoot" x="${width - 28}" y="${height - 18}" text-anchor="end">NITROTYPE · LIVE · DYNIMAGE</text>
+  ${cardFrameClose(width, height, 18, theme.stroke)}
 </svg>`,
   };
 };

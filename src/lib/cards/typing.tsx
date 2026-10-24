@@ -1,7 +1,7 @@
 import { z } from "zod";
 import type { Card, CardRenderer } from "./types";
 import { nitrotypeRacer, type NitrotypeRacer } from "@/lib/data/nitrotype";
-import { esc, fmtInt } from "./svg-helpers";
+import { esc, fmtInt, cardFrameOpen, cardFrameClose } from "./svg-helpers";
 
 const DEFAULT_W = 520;
 const DEFAULT_H = 220;
@@ -119,7 +119,7 @@ const renderSvg: CardRenderer<Data> = async ({
       @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
     </style>
   </defs>
-  <rect width="${width}" height="${height}" rx="16" ry="16" fill="url(#tBg)" stroke="${theme.stroke}" stroke-width="1"/>
+  ${cardFrameOpen("t", width, height, 16, "url(#tBg)")}
   <rect width="${width}" height="${height}" rx="16" ry="16" fill="url(#tSheen)">
     <animateTransform attributeName="transform" type="translate" from="${-width} 0" to="${width} 0" dur="3.6s" repeatCount="indefinite"/>
   </rect>
@@ -134,6 +134,7 @@ const renderSvg: CardRenderer<Data> = async ({
   <text class="lbl"  x="${width - 28}" y="146" text-anchor="end">RACES</text>
   <text class="num"  x="${width - 28}" y="170" text-anchor="end">${fmtInt(r.racesPlayed)}<animate attributeName="textContent" values="${racesCount}" dur="1.4s" fill="freeze" begin="0.45s"/></text>
   <text class="tier" x="28" y="${height - 16}">NITROTYPE.COM</text>
+  ${cardFrameClose(width, height, 16, theme.stroke)}
 </svg>`,
   };
 };

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ImageResponse } from "next/og";
 import type { Card, CardRenderer } from "./types";
-import { esc, fmtInt } from "./svg-helpers";
+import { esc, fmtInt, cardFrameOpen, cardFrameClose } from "./svg-helpers";
 
 const DEFAULT_W = 280;
 const DEFAULT_H = 140;
@@ -38,7 +38,7 @@ const renderSvg: CardRenderer<Data> = async ({
   return {
     contentType: "image/svg+xml; charset=utf-8",
     body: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(`${data.label}: ${data.value}${data.unit ?? ""}`)}">
-  <rect width="${width}" height="${height}" rx="14" ry="14" fill="${theme.bg}" stroke="${theme.stroke}" stroke-width="1"/>
+  ${cardFrameOpen("metric", width, height, 14, theme.bg)}
   <text x="${cx}" y="${valueY}" text-anchor="middle" dominant-baseline="middle"
         font-family="ui-sans-serif, system-ui, sans-serif"
         font-size="${data.size}" font-weight="700"
@@ -48,6 +48,7 @@ const renderSvg: CardRenderer<Data> = async ({
         font-size="${Math.round(data.size * 0.25)}" font-weight="500"
         fill="${theme.textMuted}"
         text-transform="uppercase" letter-spacing="${LABEL_LETTER_SPACING_EM}em">${esc(data.label.toUpperCase())}</text>
+  ${cardFrameClose(width, height, 14, theme.stroke)}
 </svg>`,
   };
 };

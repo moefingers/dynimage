@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { ImageResponse } from "next/og";
 import type { Card, CardRenderer } from "./types";
-import { esc } from "./svg-helpers";
+import { esc, cardFrameOpen, cardFrameClose } from "./svg-helpers";
 
 const DEFAULT_W = 320;
 const DEFAULT_H = 80;
@@ -52,7 +52,7 @@ const renderSvg: CardRenderer<Data> = async ({
   return {
     contentType: "image/svg+xml; charset=utf-8",
     body: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(`${data.label ?? "progress"}: ${valueText}`)}">
-  <rect width="${width}" height="${height}" rx="14" ry="14" fill="${theme.bg}" stroke="${theme.stroke}" stroke-width="1"/>
+  ${cardFrameOpen("bar", width, height, 14, theme.bg)}
   ${
     data.label
       ? `<text x="${pad}" y="${pad + 12}" font-family="ui-sans-serif, system-ui, sans-serif" font-size="13" font-weight="500" fill="${theme.text}">${esc(data.label)}</text>`
@@ -65,6 +65,7 @@ const renderSvg: CardRenderer<Data> = async ({
   }
   <rect x="${pad}" y="${barY}" width="${barW}" height="${barH}" rx="${barH / 2}" ry="${barH / 2}" fill="${theme.stroke}" opacity="${TRACK_OPACITY}"/>
   <rect x="${pad}" y="${barY}" width="${fillW}" height="${barH}" rx="${barH / 2}" ry="${barH / 2}" fill="${theme.accent}"/>
+  ${cardFrameClose(width, height, 14, theme.stroke)}
 </svg>`,
   };
 };

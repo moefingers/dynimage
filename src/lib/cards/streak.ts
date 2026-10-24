@@ -3,7 +3,7 @@ import path from "node:path";
 import { z } from "zod";
 import type { Card, CardRenderer, Theme } from "./types";
 import { userContributions, type UserContributions } from "@/lib/data/atoms";
-import { esc, fmtInt } from "./svg-helpers";
+import { esc, fmtInt, cardFrameOpen, cardFrameClose } from "./svg-helpers";
 
 const DEFAULT_W = 520;
 const DEFAULT_H = 220;
@@ -104,7 +104,7 @@ function streakSvg(
       .accent { fill: ${theme.accent}; }
     </style>
   </defs>
-  <rect width="${width}" height="${height}" rx="14" ry="14" fill="url(#card-bg)" stroke="${theme.stroke}" stroke-width="1"/>
+  ${cardFrameOpen("streak", width, height, 14, "url(#card-bg)")}
   <g filter="url(#blur)">
     <circle cx="${cx1}" cy="${cy1}" r="${blobR}" fill="${theme.accent}" opacity="0.55"/>
     <circle cx="${cx2}" cy="${cy2}" r="${blobR * 0.7}" fill="${theme.gradient}" opacity="0.45"/>
@@ -119,6 +119,7 @@ function streakSvg(
   <text x="${width / 2 + 20}" y="${cy1 + 50}" class="med">${esc(fmtInt(data.longestStreak))}</text>
   <text x="${width / 2 + 20}" y="${cy1 + 70}" class="label">longest</text>
   <text x="${width - 22}" y="${height - 22}" text-anchor="end" class="sub" opacity="0.6">@${esc(data.login)}</text>
+  ${cardFrameClose(width, height, 14, theme.stroke)}
 </svg>`;
 }
 

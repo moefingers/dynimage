@@ -6,7 +6,7 @@ import {
   type UserOverview,
   type UserContributions,
 } from "@/lib/data/atoms";
-import { esc, fmtInt } from "./svg-helpers";
+import { esc, fmtInt, cardFrameOpen, cardFrameClose } from "./svg-helpers";
 
 const DEFAULT_W = 900;
 const DEFAULT_H = 140;
@@ -117,12 +117,13 @@ const renderSvg: CardRenderer<Data> = async ({
       @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
     </style>
   </defs>
-  <rect width="${width}" height="${height}" rx="14" ry="14" fill="url(#stripBg)" stroke="${theme.stroke}" stroke-width="1"/>
+  ${cardFrameOpen("strip", width, height, 14, "url(#stripBg)")}
   <rect width="${width}" height="${height}" rx="14" ry="14" fill="url(#stripSheen)">
     <animateTransform attributeName="transform" type="translate" from="${-width} 0" to="${width} 0" dur="4.2s" repeatCount="indefinite"/>
   </rect>
   ${seps.join("")}
   ${cells}
+  ${cardFrameClose(width, height, 14, theme.stroke)}
 </svg>`,
   };
 };

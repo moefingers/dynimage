@@ -13,7 +13,7 @@ import {
   type UserOverview,
   type UserContributions,
 } from "@/lib/data/atoms";
-import { esc, fmtInt } from "./svg-helpers";
+import { esc, fmtInt, cardFrameOpen, cardFrameClose } from "./svg-helpers";
 
 const DEFAULT_W = 360;
 const DEFAULT_H = 360;
@@ -162,7 +162,7 @@ const renderSvg: CardRenderer<Data> = async ({
       @keyframes nFade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
     </style>
   </defs>
-  <rect width="${width}" height="${height}" rx="18" ry="18" fill="url(#nBg)" stroke="${theme.stroke}" stroke-width="1"/>
+  ${cardFrameOpen("n", width, height, 18, "url(#nBg)")}
   <circle cx="${cx}" cy="${cy}" r="${r * 1.55}" fill="none" stroke="${theme.accent}" stroke-width="1" stroke-dasharray="4 8" opacity="0.6" transform-origin="${cx} ${cy}">
     <animateTransform attributeName="transform" type="rotate" from="0 ${cx} ${cy}" to="360 ${cx} ${cy}" dur="${ringDur1}" repeatCount="indefinite"/>
   </circle>
@@ -173,6 +173,7 @@ const renderSvg: CardRenderer<Data> = async ({
   <text class="nName" x="${cx}" y="${height - 80}" text-anchor="middle">@${esc(data.overview.login).toUpperCase()}</text>
   <text class="nNum"  x="${cx}" y="${height - 42}" text-anchor="middle">${fmtInt(commits)}<animate attributeName="textContent" values="${countVals}" dur="1.4s" fill="freeze" begin="0.4s"/></text>
   <text class="nLbl"  x="${cx}" y="${height - 22}" text-anchor="middle">COMMITS · LAST YEAR</text>
+  ${cardFrameClose(width, height, 18, theme.stroke)}
 </svg>`,
   };
 };
