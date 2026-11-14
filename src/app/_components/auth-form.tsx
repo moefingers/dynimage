@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { signIn, signUp } from "@/lib/auth/client";
+import { safeRedirect } from "@/lib/auth/redirect";
 
 // Shared sign-in / sign-up form. CONTEXTUAL: honors ?redirect= so a gated
 // action returns the user to their exact prior state (funnel §2/§7 — the
@@ -42,29 +43,15 @@ const ghBtn: React.CSSProperties = {
   marginBottom: 14,
 };
 
-// Open-redirect guard: a gated action passes ?redirect=<where to return>.
-// Only allow a root-relative path or a SAME-ORIGIN absolute URL — never an
-// off-site URL (post-auth open redirect / phishing). Falls back to /account.
-function safeRedirect(raw: string | null): string {
-  if (!raw) return "/account";
-  // root-relative (but NOT protocol-relative "//evil.com")
-  if (raw.startsWith("/") && !raw.startsWith("//")) return raw;
-  if (typeof window !== "undefined") {
-    try {
-      const u = new URL(raw, window.location.origin);
-      if (u.origin === window.location.origin)
-        return u.pathname + u.search + u.hash;
-    } catch {
-      /* malformed → fall through */
-    }
-  }
-  return "/account";
-}
-
 export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
   const router = useRouter();
   const sp = useSearchParams();
-  const redirect = safeRedirect(sp.get("redirect"));
+  // A gated action passes ?redirect=<where to return>; safeRedirect keeps it
+  // same-origin and short (lib/auth/redirect.ts).
+  const redirect = safeRedirect(
+    sp.get("redirect"),
+    typeof window !== "undefined" ? window.location.origin : undefined,
+  );
 
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
@@ -99,16 +86,30 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
       <h1 style={{ fontSize: 24, marginBottom: 4 }}>
         {isSignUp ? "Create your account" : "Sign in"}
       </h1>
-      <p style={{ color: "#71717a", fontSize: 13, marginTop: 0, marginBottom: 20 }}>
-        Accounts unlock saving, publishing, and your private numbers. The
-        public card never needs one.
+      <p
+        style={{
+          color: "#71717a",
+          fontSize: 13,
+          marginTop: 0,
+          marginBottom: 20,
+        }}
+      >
+        Accounts unlock saving, publishing, and your private numbers. The public
+        card never needs one.
       </p>
 
       <button type="button" style={ghBtn} onClick={onGitHub}>
         Continue with GitHub
       </button>
 
-      <div style={{ textAlign: "center", color: "#a1a1aa", fontSize: 12, margin: "0 0 14px" }}>
+      <div
+        style={{
+          textAlign: "center",
+          color: "#a1a1aa",
+          fontSize: 12,
+          margin: "0 0 14px",
+        }}
+      >
         or
       </div>
 
@@ -149,7 +150,14 @@ export function AuthForm({ mode }: { mode: "sign-in" | "sign-up" }) {
         </button>
       </form>
 
-      <p style={{ fontSize: 13, color: "#71717a", marginTop: 16, textAlign: "center" }}>
+      <p
+        style={{
+          fontSize: 13,
+          color: "#71717a",
+          marginTop: 16,
+          textAlign: "center",
+        }}
+      >
         {isSignUp ? "Already have an account? " : "No account yet? "}
         <a
           style={{ color: "#7c3aed" }}

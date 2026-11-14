@@ -5,6 +5,7 @@ import {
   AUTH_BODY_LIMIT_BYTES,
   refuseOversizedAuthBody,
 } from "./body-limit.ts";
+import { REDIRECT_MAX_CHARS, safeRedirect } from "./redirect.ts";
 
 // Better Auth's handler, as a stand-in that reads the request as it would:
 // what these tests ask is what reaches it, and what doesn't.
@@ -92,23 +93,67 @@ test("passes a body of exactly the limit on, byte for byte, with its url and hea
 });
 
 test("passes the largest sign-in a real page can send", async () => {
-  // auth-form.tsx sends signIn.social({ callbackURL: <the page's ?redirect=> }),
-  // uncapped. At Vercel's 14 KB limit on a URL, `%01` escapes decode to a
-  // control character that JSON writes as `\u0001`: twice the URL's bytes.
-  const VERCEL_URL_LIMIT = 14 * 1024;
-  const prefix = "https://dynimage.vercel.app/sign-in?redirect=/";
-  const n = Math.floor((VERCEL_URL_LIMIT - prefix.length) / 3);
-  const pageUrl = prefix + "%01".repeat(n);
-  assert.ok(pageUrl.length <= VERCEL_URL_LIMIT);
-  const redirect = new URL(pageUrl).searchParams.get("redirect")!;
-  const body = JSON.stringify({ provider: "github", callbackURL: redirect });
+  // auth-form.tsx sends signIn.social({ callbackURL: safeRedirect(?redirect=) }),
+  // at most REDIRECT_MAX_CHARS long. At worst every character is a control
+  // character that JSON writes as `\u0001`, 6 bytes each.
+  const longest = "/" + "\u0001".repeat(REDIRECT_MAX_CHARS - 1);
+  assert.equal(safeRedirect(longest), longest);
+  assert.equal(safeRedirect(longest + "\u0001"), "/account");
+  const body = JSON.stringify({ provider: "github", callbackURL: longest });
   const size = new TextEncoder().encode(body).byteLength;
-  assert.ok(size > 28_000, `largest real body is ${size} bytes`);
-  assert.ok(size * 9 < AUTH_BODY_LIMIT_BYTES);
+  assert.ok(size > 12_000, `largest real body is ${size} bytes`);
+  assert.ok(size * 2.5 < AUTH_BODY_LIMIT_BYTES);
 
   const res = await handler(post(body));
   assert.equal(res.status, 200);
   assert.equal(new TextDecoder().decode(received[0]!.bytes), body);
+});
+
+test("refuses a body carrying scopes with 400, before Better Auth runs", async () => {
+  const body = JSON.stringify({
+    provider: "github",
+    callbackURL: "/account",
+    scopes: Array.from({ length: 1000 }, () => 1),
+  });
+  const res = await handler(post(body));
+  assert.equal(res.status, 400);
+  assert.equal(
+    ((await res.json()) as { code: string }).code,
+    "SCOPES_NOT_ALLOWED",
+  );
+  assert.deepEqual(received, []);
+});
+
+test("refuses scopes on /link-social, under any JSON media type, even empty", async () => {
+  const req = new Request("https://dynimage.example/api/auth/link-social", {
+    method: "POST",
+    body: JSON.stringify({ provider: "github", scopes: [] }),
+    headers: { "content-type": "application/vnd.api+json; charset=utf-8" },
+  });
+  const res = await handler(req);
+  assert.equal(res.status, 400);
+  assert.deepEqual(received, []);
+});
+
+test("passes a real sign-in body without scopes on, unchanged", async () => {
+  const body = JSON.stringify({ provider: "github", callbackURL: "/account" });
+  const res = await handler(post(body));
+  assert.equal(res.status, 200);
+  assert.equal(new TextDecoder().decode(received[0]!.bytes), body);
+});
+
+test("passes a non-JSON body or malformed JSON on for Better Auth to answer", async () => {
+  // Form bodies parse into flat strings, never an array; malformed JSON gets
+  // Better Auth's own single 400.
+  const form = await handler(
+    post("scopes=1&scopes=2", {
+      "content-type": "application/x-www-form-urlencoded",
+    }),
+  );
+  assert.equal(form.status, 200);
+  const broken = await handler(post('{"scopes": [1, 1,'));
+  assert.equal(broken.status, 200);
+  assert.equal(received.length, 2);
 });
 
 test("refuses a chunked body with no content-length once it passes the limit, without reading the rest", async () => {
@@ -123,8 +168,8 @@ test("refuses a chunked body with no content-length once it passes the limit, wi
 });
 
 test("passes a chunked body under the limit on, byte for byte", async () => {
-  const bytes = bytesOf(100 * 1024);
-  const { stream } = chunked(bytes);
+  const bytes = bytesOf(Math.floor(AUTH_BODY_LIMIT_BYTES * 0.75));
+  const { stream } = chunked(bytes, 4 * 1024);
   const res = await handler(post(stream));
   assert.equal(res.status, 200);
   assert.ok(Buffer.from(received[0]!.bytes).equals(Buffer.from(bytes)));
