@@ -1,4 +1,5 @@
 import { auth } from "@/lib/auth/auth";
+import { refuseOversizedAuthBody } from "@/lib/auth/body-limit";
 import { toNextJsHandler } from "better-auth/next-js";
 
 // Better Auth's catch-all handler — sign-in/up, OAuth callback
@@ -7,4 +8,9 @@ import { toNextJsHandler } from "better-auth/next-js";
 // NOT touch the card render flow (dispatch.ts) — that wiring is Wave 2.
 export const runtime = "nodejs";
 
-export const { GET, POST } = toNextJsHandler(auth);
+const handlers = toNextJsHandler(auth);
+
+export const GET = handlers.GET;
+// A body over the limit is refused before Better Auth reads any of it
+// (lib/auth/body-limit.ts): its public POST endpoints parse unbounded arrays.
+export const POST = refuseOversizedAuthBody(handlers.POST);

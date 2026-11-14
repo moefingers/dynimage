@@ -15,6 +15,10 @@
 //
 // Pure (only global fetch) → unit-testable by stubbing fetch.
 
+import type { GithubProfile as BetterAuthGithubProfile } from "better-auth/social-providers";
+
+// The fields of GitHub's /user response read here, null-aware as GitHub
+// sends them. The response itself is GitHub's whole profile.
 type GithubProfile = {
   id: number;
   login: string;
@@ -31,17 +35,19 @@ type GithubEmail = {
 };
 
 export type GithubUserInfo = {
+  // No `id` here: since better-auth 1.7 the provider identity comes only
+  // from the raw profile (`data`), through the GitHub provider's
+  // `accountSubject: ({ profile }) => profile.id`, stored as
+  // String(profile.id) — the same account_id 1.6 wrote, so existing
+  // accounts keep matching. `user` holds the mutable local-user fields.
   user: {
-    // Stringified to match Better Auth's getUserInfo option type (it
-    // stringifies the provider id internally anyway → identical value, so
-    // account linking is unchanged vs the default provider).
-    id: string;
     name: string;
     email: string | undefined;
     image: string;
     emailVerified: boolean;
   };
-  data: GithubProfile;
+  // The raw /user response, which better-auth's account key reads.
+  data: BetterAuthGithubProfile;
 } | null;
 
 const GITHUB_API = "https://api.github.com";
@@ -137,12 +143,14 @@ export async function githubGetUserInfo(token: {
 
   return {
     user: {
-      id: String(profile.id),
       name: profile.name || profile.login || "",
       email,
       image: profile.avatar_url,
       emailVerified,
     },
-    data: profile,
+    // GitHub's whole /user response, unchanged; GithubProfile above only
+    // names the fields this function reads. (better-auth types `id` as a
+    // string; GitHub sends a number, and the account key is String() of it.)
+    data: profile as unknown as BetterAuthGithubProfile,
   };
 }
