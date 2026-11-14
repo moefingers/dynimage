@@ -1,0 +1,123 @@
+// How large a request body Better Auth's route reads. `/api/auth/*` is
+// public, and Better Auth validates a body before any of its own code runs:
+// better-call parses it, and zod builds one issue per failing element of an
+// array schema with no maximum, which `/sign-in/social`'s `scopes` is (about
+// 240 MB and a second of CPU per 0.5 MB of body, measured on marcan; no
+// better-auth version bounds it). zod's fix (GHSA-mrhx-c7xc-m3w5) helps only
+// arrays that have a maximum, and neither Better Auth nor Next offers a size
+// limit on this handler. So the route refuses here, before Better Auth reads
+// anything.
+//
+// The body is read only up to the limit, counting the bytes as they arrive,
+// whatever `content-length` says, and Better Auth is handed a request rebuilt
+// from those bytes. A request with no body passes as it came.
+//
+// Ported from OutlastSite's OUT-1513 (lib/auth-body-limit.ts,
+// lib/net/read-body-up-to.ts).
+
+/**
+ * The most Better Auth's route reads of a request's body: 256 KiB.
+ *
+ * The largest body a real dynimage page sends is `/sign-in/social` from
+ * auth-form.tsx, whose `callbackURL` is the page's own `?redirect=`, uncapped
+ * in length. A URL at Vercel's 14 KB limit can carry `%01` escapes that JSON
+ * writes back as `\u0001`, doubling them: about 28.7 KB of body (the test
+ * computes it). Sign-up and email sign-in carry a name, an email and a
+ * password, far smaller. So this is about 9 times the largest real body.
+ */
+export const AUTH_BODY_LIMIT_BYTES = 256 * 1024;
+
+export type BodyUpTo =
+  | { readonly bytes: Uint8Array<ArrayBuffer> }
+  | { readonly failed: "tooLarge" | "unreadable" };
+
+/**
+ * Reads a request's body whole, up to `limitBytes`, counting the bytes as
+ * they arrive: `content-length` can be absent or wrong, so it's the stream
+ * that counts. Past the limit the reading stops, the stream is cancelled and
+ * the rest is never held.
+ */
+export async function readBodyUpTo(
+  request: Request,
+  limitBytes: number,
+): Promise<BodyUpTo> {
+  if (request.body === null) return { bytes: new Uint8Array(0) };
+  const reader = request.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      size += value.byteLength;
+      if (size > limitBytes) {
+        await reader.cancel("over the limit").catch(() => undefined);
+        return { failed: "tooLarge" };
+      }
+      chunks.push(value);
+    }
+  } catch {
+    return { failed: "unreadable" };
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return { bytes };
+}
+
+type Handler = (request: Request) => Promise<Response>;
+
+// Over the limit: in Better Auth's error shape, and logged by path alone,
+// since nothing real should ever reach it.
+function tooLarge(request: Request): Response {
+  console.warn("[auth-body-limit] refused a body over the limit", {
+    path: new URL(request.url).pathname,
+    limitBytes: AUTH_BODY_LIMIT_BYTES,
+  });
+  return Response.json(
+    { code: "BODY_TOO_LARGE", message: "This request is too large." },
+    { status: 413 },
+  );
+}
+
+/**
+ * `handler`, refusing with 413, before it runs, a request whose body passes
+ * `AUTH_BODY_LIMIT_BYTES`.
+ */
+export function refuseOversizedAuthBody(handler: Handler): Handler {
+  return async (request) => {
+    if (request.body === null) return handler(request);
+    if (Number(request.headers.get("content-length")) > AUTH_BODY_LIMIT_BYTES) {
+      await request.body
+        .cancel("over the auth route's limit")
+        .catch(() => undefined);
+      return tooLarge(request);
+    }
+    const read = await readBodyUpTo(request, AUTH_BODY_LIMIT_BYTES);
+    if ("failed" in read) {
+      return read.failed === "tooLarge"
+        ? tooLarge(request)
+        : Response.json(
+            {
+              code: "BODY_UNREADABLE",
+              message: "This request could not be read.",
+            },
+            { status: 400 },
+          );
+    }
+    // Rebuilt from its parts. Never `new Request(request, ...)`: Next hands a
+    // route a Proxy of the request, which has no Request brand, so the
+    // constructor reads it as a URL and throws, failing every POST.
+    return handler(
+      new Request(request.url, {
+        method: request.method,
+        headers: request.headers,
+        body: read.bytes,
+        signal: request.signal,
+      }),
+    );
+  };
+}
