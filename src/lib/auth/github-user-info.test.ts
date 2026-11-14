@@ -50,14 +50,23 @@ test("githubGetUserInfo: first /user 503 then 200 recovers (THE bug)", async () 
       userCalls += 1;
       return userCalls === 1
         ? res(503, {})
-        : res(200, { id: 7, login: "x", name: null, email: "p@x.com", avatar_url: "a" });
+        : res(200, {
+            id: 7,
+            login: "x",
+            name: null,
+            email: "p@x.com",
+            avatar_url: "a",
+          });
     }
     if (url.endsWith("/user/emails")) return res(200, []);
     return res(404, {});
   });
   const info = await githubGetUserInfo({ accessToken: "tok" });
   assert.ok(info, "should recover, not null");
-  assert.equal(info!.user.id, "7");
+  // The account key comes from the raw profile (better-auth 1.7's GitHub
+  // accountSubject reads data.id); the mapped user carries no id.
+  assert.equal(info!.data.id, 7);
+  assert.equal("id" in info!.user, false);
   assert.equal(info!.user.email, "p@x.com");
   assert.ok(userCalls >= 2, "should have retried /user");
 });
@@ -74,8 +83,18 @@ test("githubGetUserInfo: private email resolved from /user/emails (verified)", a
       });
     if (url.endsWith("/user/emails"))
       return res(200, [
-        { email: "old@x.com", primary: false, verified: true, visibility: "private" },
-        { email: "mo@x.com", primary: true, verified: true, visibility: "private" },
+        {
+          email: "old@x.com",
+          primary: false,
+          verified: true,
+          visibility: "private",
+        },
+        {
+          email: "mo@x.com",
+          primary: true,
+          verified: true,
+          visibility: "private",
+        },
       ]);
     return res(404, {});
   });
