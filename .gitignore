@@ -38,3 +38,4 @@ next-env.d.ts
 # coordination only; carries secrets-in-transit (e.g. PATs handed between
 # agents) in cleartext, so it must NEVER be committed.
 CONTEXT/active/bus/
+.cover-preview/

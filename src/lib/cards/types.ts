@@ -54,6 +54,9 @@ export type Card<TInput = unknown, TData = unknown> = {
   name: string;
   runtime: "edge" | "nodejs";
   defaultSize: { width: number; height: number };
+  // Optional per-input default size, for cards whose layouts have
+  // different natural shapes (e.g. ?layout=cover). Explicit w/h still win.
+  sizeFor?: (input: TInput) => { width: number; height: number } | null;
   input: z.ZodType<TInput>;
   resolve: (input: TInput, cache?: DedupeCache) => Promise<TData>;
   formats: Partial<Record<CardFormat, CardRenderer<TData>>>;

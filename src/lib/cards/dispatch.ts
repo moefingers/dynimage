@@ -91,12 +91,11 @@ export async function dispatchCard(input: DispatchInput): Promise<Response> {
     });
   }
 
+  const size = card.sizeFor?.(parsed.data) ?? card.defaultSize;
   const width =
-    parseIntOr(input.searchParams.get("w"), card.defaultSize.width) ??
-    card.defaultSize.width;
+    parseIntOr(input.searchParams.get("w"), size.width) ?? size.width;
   const height =
-    parseIntOr(input.searchParams.get("h"), card.defaultSize.height) ??
-    card.defaultSize.height;
+    parseIntOr(input.searchParams.get("h"), size.height) ?? size.height;
   const theme = resolveTheme(input.searchParams);
 
   let rendered;
