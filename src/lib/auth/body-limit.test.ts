@@ -92,17 +92,23 @@ test("passes a body of exactly the limit on, byte for byte, with its url and hea
   assert.ok(Buffer.from(received[0]!.bytes).equals(Buffer.from(bytes)));
 });
 
+test("the limit is 32 KiB", () => {
+  assert.equal(AUTH_BODY_LIMIT_BYTES, 32 * 1024);
+});
+
 test("passes the largest sign-in a real page can send", async () => {
-  // auth-form.tsx sends signIn.social({ callbackURL: safeRedirect(?redirect=) }),
-  // at most REDIRECT_MAX_CHARS long. At worst every character is a control
-  // character that JSON writes as `\u0001`, 6 bytes each.
-  const longest = "/" + "\u0001".repeat(REDIRECT_MAX_CHARS - 1);
-  assert.equal(safeRedirect(longest), longest);
-  assert.equal(safeRedirect(longest + "\u0001"), "/account");
+  // auth-form.tsx sends signIn.social({ callbackURL: safeRedirect(?redirect=) }):
+  // at most REDIRECT_MAX_CHARS of plain ASCII, the editor's whole-scene
+  // target at its longest, which JSON carries one byte per character.
+  const longest = safeRedirect(
+    "/editor?s=" + "A".repeat(REDIRECT_MAX_CHARS - 10),
+    "https://dynimage.vercel.app",
+  );
+  assert.equal(longest.length, REDIRECT_MAX_CHARS);
   const body = JSON.stringify({ provider: "github", callbackURL: longest });
   const size = new TextEncoder().encode(body).byteLength;
-  assert.ok(size > 12_000, `largest real body is ${size} bytes`);
-  assert.ok(size * 2.5 < AUTH_BODY_LIMIT_BYTES);
+  assert.ok(size > 16_000, `largest real body is ${size} bytes`);
+  assert.ok(size * 1.9 < AUTH_BODY_LIMIT_BYTES);
 
   const res = await handler(post(body));
   assert.equal(res.status, 200);
@@ -117,21 +123,46 @@ test("refuses a body carrying scopes with 400, before Better Auth runs", async (
   });
   const res = await handler(post(body));
   assert.equal(res.status, 400);
-  assert.equal(
-    ((await res.json()) as { code: string }).code,
-    "SCOPES_NOT_ALLOWED",
-  );
+  assert.deepEqual(await res.json(), {
+    code: "FIELD_NOT_ALLOWED",
+    message: 'This request may not carry "scopes".',
+  });
   assert.deepEqual(received, []);
 });
 
-test("refuses scopes on /link-social, under any JSON media type, even empty", async () => {
+test("refuses scopes on /link-social too, even empty", async () => {
   const req = new Request("https://dynimage.example/api/auth/link-social", {
     method: "POST",
     body: JSON.stringify({ provider: "github", scopes: [] }),
-    headers: { "content-type": "application/vnd.api+json; charset=utf-8" },
+    headers: { "content-type": "application/json" },
   });
   const res = await handler(req);
   assert.equal(res.status, 400);
+  assert.deepEqual(received, []);
+});
+
+test("refuses scopes under any media type better-call reads as JSON", async () => {
+  const res = await handler(
+    post(JSON.stringify({ scopes: [1] }), {
+      "content-type": "application/vnd.api+json; charset=utf-8",
+    }),
+  );
+  assert.equal(res.status, 400);
+  assert.deepEqual(received, []);
+});
+
+test("refuses additionalParams, the other unbounded collection", async () => {
+  const additionalParams = Object.fromEntries(
+    Array.from({ length: 500 }, (_, i) => [`k${i}`, i]),
+  );
+  const res = await handler(
+    post(JSON.stringify({ provider: "github", additionalParams })),
+  );
+  assert.equal(res.status, 400);
+  assert.equal(
+    ((await res.json()) as { message: string }).message,
+    'This request may not carry "additionalParams".',
+  );
   assert.deepEqual(received, []);
 });
 

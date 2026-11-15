@@ -19,43 +19,51 @@
  * The most Better Auth's route reads of a request's body: 32 KiB.
  *
  * The largest body a real dynimage page sends is `/sign-in/social` from
- * auth-form.tsx, whose `callbackURL` is the page's own `?redirect=`, capped
- * at REDIRECT_MAX_CHARS (lib/auth/redirect.ts). At worst every character is
- * a control character that JSON writes as `\u0001` (6 bytes): about 12.3 KB
- * of body (the test computes it). Real sign-ins are under 1 KB. Sign-up and
- * email sign-in carry a name, an email and a password, far smaller. So this
- * is about 2.6 times the largest real body.
+ * auth-form.tsx, whose `callbackURL` is safeRedirect's result
+ * (lib/auth/redirect.ts): at most REDIRECT_MAX_CHARS (16 KiB) of plain ASCII
+ * that JSON carries one byte per character, so about 16.4 KB of body (the
+ * test computes it). That's the editor's whole-scene return target at its
+ * longest; ordinary sign-ins are under 1 KB, and sign-up and email sign-in
+ * carry a name, an email and a password. So this is about twice the largest
+ * real body.
  *
- * A body at this size that fails every element of an unbounded array still
- * costs something, which is why `scopes` is refused outright (below).
+ * A body at this size that fails every element of an unbounded collection
+ * still costs something, which is why the fields that hold one are refused
+ * outright (below).
  */
 export const AUTH_BODY_LIMIT_BYTES = 32 * 1024;
 
 // better-call's own test for a JSON body (better-call dist/utils.mjs), so
-// the scopes check below sees every body Better Auth would parse as JSON.
-// Form and multipart bodies are parsed into flat strings, never arrays.
+// the check below sees every body Better Auth would parse as JSON. Form and
+// multipart bodies are parsed into flat strings, never collections.
 const JSON_CONTENT_TYPE = /^application\/([a-z0-9.+-]*\+)?json/i;
 
 /**
- * Whether a JSON body carries a top-level `scopes` field. dynimage never
- * sends one (it calls signIn.social with a provider and a callbackURL, and
- * never linkSocial), and Better Auth validates `scopes` on `/sign-in/social`
- * and `/link-social` as an array with no maximum, building one zod issue per
- * failing element. A body that doesn't parse passes on: Better Auth answers
- * it with a single 400.
+ * Top-level fields dynimage never sends that Better Auth validates as an
+ * unbounded collection, building one zod issue per failing entry:
+ * `scopes` (an array, on `/sign-in/social` and `/link-social`) and
+ * `additionalParams` (a record, on the same two). dynimage calls
+ * signIn.social with a provider and a callbackURL, and never linkSocial.
  */
-function carriesScopes(request: Request, bytes: Uint8Array): boolean {
+const REFUSED_FIELDS = ["scopes", "additionalParams"] as const;
+
+/**
+ * The first refused field a JSON body carries at its top level, if any. A
+ * body that doesn't parse passes on: Better Auth answers it with a single
+ * 400.
+ */
+function refusedField(request: Request, bytes: Uint8Array): string | null {
   const type = (request.headers.get("content-type") ?? "").toLowerCase();
-  if (!JSON_CONTENT_TYPE.test(type)) return false;
+  if (!JSON_CONTENT_TYPE.test(type)) return null;
   let body: unknown;
   try {
     body = JSON.parse(new TextDecoder().decode(bytes));
   } catch {
-    return false;
+    return null;
   }
-  return (
-    typeof body === "object" && body !== null && Object.hasOwn(body, "scopes")
-  );
+  if (typeof body !== "object" || body === null) return null;
+  const parsed = body;
+  return REFUSED_FIELDS.find((field) => Object.hasOwn(parsed, field)) ?? null;
 }
 
 export type BodyUpTo =
@@ -116,7 +124,8 @@ function tooLarge(request: Request): Response {
 
 /**
  * `handler`, refusing before it runs a request whose body passes
- * `AUTH_BODY_LIMIT_BYTES` (413) or whose JSON body carries `scopes` (400).
+ * `AUTH_BODY_LIMIT_BYTES` (413) or whose JSON body carries a field in
+ * REFUSED_FIELDS (400).
  */
 export function refuseOversizedAuthBody(handler: Handler): Handler {
   return async (request) => {
@@ -139,11 +148,12 @@ export function refuseOversizedAuthBody(handler: Handler): Handler {
             { status: 400 },
           );
     }
-    if (carriesScopes(request, read.bytes)) {
+    const field = refusedField(request, read.bytes);
+    if (field) {
       return Response.json(
         {
-          code: "SCOPES_NOT_ALLOWED",
-          message: "This sign-in does not accept requested scopes.",
+          code: "FIELD_NOT_ALLOWED",
+          message: `This request may not carry "${field}".`,
         },
         { status: 400 },
       );
