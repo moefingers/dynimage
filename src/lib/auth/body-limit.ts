@@ -16,16 +16,55 @@
 // lib/net/read-body-up-to.ts).
 
 /**
- * The most Better Auth's route reads of a request's body: 256 KiB.
+ * The most Better Auth's route reads of a request's body: 32 KiB.
  *
  * The largest body a real dynimage page sends is `/sign-in/social` from
- * auth-form.tsx, whose `callbackURL` is the page's own `?redirect=`, uncapped
- * in length. A URL at Vercel's 14 KB limit can carry `%01` escapes that JSON
- * writes back as `\u0001`, doubling them: about 28.7 KB of body (the test
- * computes it). Sign-up and email sign-in carry a name, an email and a
- * password, far smaller. So this is about 9 times the largest real body.
+ * auth-form.tsx, whose `callbackURL` is safeRedirect's result
+ * (lib/auth/redirect.ts): at most REDIRECT_MAX_CHARS (16 KiB) of plain ASCII
+ * that JSON carries one byte per character, so about 16.4 KB of body (the
+ * test computes it). That's the editor's whole-scene return target at its
+ * longest; ordinary sign-ins are under 1 KB, and sign-up and email sign-in
+ * carry a name, an email and a password. So this is about twice the largest
+ * real body.
+ *
+ * A body at this size that fails every element of an unbounded collection
+ * still costs something, which is why the fields that hold one are refused
+ * outright (below).
  */
-export const AUTH_BODY_LIMIT_BYTES = 256 * 1024;
+export const AUTH_BODY_LIMIT_BYTES = 32 * 1024;
+
+// better-call's own test for a JSON body (better-call dist/utils.mjs), so
+// the check below sees every body Better Auth would parse as JSON. Form and
+// multipart bodies are parsed into flat strings, never collections.
+const JSON_CONTENT_TYPE = /^application\/([a-z0-9.+-]*\+)?json/i;
+
+/**
+ * Top-level fields dynimage never sends that Better Auth validates as an
+ * unbounded collection, building one zod issue per failing entry:
+ * `scopes` (an array, on `/sign-in/social` and `/link-social`) and
+ * `additionalParams` (a record, on the same two). dynimage calls
+ * signIn.social with a provider and a callbackURL, and never linkSocial.
+ */
+const REFUSED_FIELDS = ["scopes", "additionalParams"] as const;
+
+/**
+ * The first refused field a JSON body carries at its top level, if any. A
+ * body that doesn't parse passes on: Better Auth answers it with a single
+ * 400.
+ */
+function refusedField(request: Request, bytes: Uint8Array): string | null {
+  const type = (request.headers.get("content-type") ?? "").toLowerCase();
+  if (!JSON_CONTENT_TYPE.test(type)) return null;
+  let body: unknown;
+  try {
+    body = JSON.parse(new TextDecoder().decode(bytes));
+  } catch {
+    return null;
+  }
+  if (typeof body !== "object" || body === null) return null;
+  const parsed = body;
+  return REFUSED_FIELDS.find((field) => Object.hasOwn(parsed, field)) ?? null;
+}
 
 export type BodyUpTo =
   | { readonly bytes: Uint8Array<ArrayBuffer> }
@@ -84,8 +123,9 @@ function tooLarge(request: Request): Response {
 }
 
 /**
- * `handler`, refusing with 413, before it runs, a request whose body passes
- * `AUTH_BODY_LIMIT_BYTES`.
+ * `handler`, refusing before it runs a request whose body passes
+ * `AUTH_BODY_LIMIT_BYTES` (413) or whose JSON body carries a field in
+ * REFUSED_FIELDS (400).
  */
 export function refuseOversizedAuthBody(handler: Handler): Handler {
   return async (request) => {
@@ -107,6 +147,16 @@ export function refuseOversizedAuthBody(handler: Handler): Handler {
             },
             { status: 400 },
           );
+    }
+    const field = refusedField(request, read.bytes);
+    if (field) {
+      return Response.json(
+        {
+          code: "FIELD_NOT_ALLOWED",
+          message: `This request may not carry "${field}".`,
+        },
+        { status: 400 },
+      );
     }
     // Rebuilt from its parts. Never `new Request(request, ...)`: Next hands a
     // route a Proxy of the request, which has no Request brand, so the
