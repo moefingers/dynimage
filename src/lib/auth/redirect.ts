@@ -38,15 +38,35 @@ const UNSAFE = /[\\\u0000-\u001f\u007f]/;
 export function safeRedirect(raw: string | null, origin?: string): string {
   if (!raw || UNSAFE.test(raw)) return FALLBACK;
   if (!origin && !raw.startsWith("/")) return FALLBACK;
-  const base = new URL(origin ?? NO_ORIGIN);
+  let base: URL;
   let url: URL;
   try {
+    base = new URL(origin ?? NO_ORIGIN);
     url = new URL(raw, base);
   } catch {
     return FALLBACK;
   }
   if (url.origin !== base.origin) return FALLBACK;
   const target = url.pathname + url.search + url.hash;
-  if (target.length <= REDIRECT_MAX_CHARS) return target;
-  return url.pathname.length <= REDIRECT_MAX_CHARS ? url.pathname : FALLBACK;
+  if (target.length <= REDIRECT_MAX_CHARS && staysHere(target, base)) {
+    return target;
+  }
+  return url.pathname.length <= REDIRECT_MAX_CHARS &&
+    staysHere(url.pathname, base)
+    ? url.pathname
+    : FALLBACK;
+}
+
+// Whether a path the browser will resolve stays on this site. Parsing
+// resolves dot segments, so a path like "/..//evil.com" comes out as
+// "//evil.com", which a browser (and Next's router.push) reads as another
+// host. The result must be root-relative, not protocol-relative, and must
+// resolve back to the same origin.
+function staysHere(path: string, base: URL): boolean {
+  if (!path.startsWith("/") || path.startsWith("//")) return false;
+  try {
+    return new URL(path, base).origin === base.origin;
+  } catch {
+    return false;
+  }
 }

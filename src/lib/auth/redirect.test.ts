@@ -39,6 +39,75 @@ test("refuses backslash and control-character tricks that parse as another host"
   assert.equal(safeRedirect("/%09/evil.com", ORIGIN), "/%09/evil.com");
 });
 
+test("refuses dot segments that resolve to a protocol-relative host", () => {
+  for (const raw of [
+    "/..//evil.com",
+    "/.//evil.com",
+    "/%2e%2e//evil.com",
+    "/editor/..//evil.com?x",
+    "https://dynimage.vercel.app/..//evil.com",
+    "..//evil.com",
+  ]) {
+    assert.equal(safeRedirect(raw, ORIGIN), "/account", raw);
+    assert.equal(safeRedirect(raw), "/account", raw);
+  }
+});
+
+test("never returns anything but /account or a path on this site (seeded fuzz)", () => {
+  const parts = [
+    "/",
+    "//",
+    "..",
+    ".",
+    "%2e",
+    "%2E",
+    "%2f",
+    "%5c",
+    "evil.com",
+    "@",
+    "?",
+    "#",
+    ":",
+    "a",
+    "%",
+    "[::1]",
+    "https:",
+    "é",
+    " ",
+    "~",
+  ];
+  let seed = 0x9e3779b9;
+  const next = () => {
+    seed ^= seed << 13;
+    seed ^= seed >>> 17;
+    seed ^= seed << 5;
+    return (seed >>> 0) / 2 ** 32;
+  };
+  for (let i = 0; i < 20_000; i++) {
+    let raw = "";
+    const n = 1 + Math.floor(next() * 8);
+    for (let j = 0; j < n; j++) raw += parts[Math.floor(next() * parts.length)];
+    for (const origin of [ORIGIN, undefined]) {
+      const out = safeRedirect(raw, origin);
+      if (out === "/account") continue;
+      assert.ok(
+        out.startsWith("/") && !out.startsWith("//"),
+        `${raw} -> ${out}`,
+      );
+      assert.equal(new URL(out, ORIGIN).origin, ORIGIN, `${raw} -> ${out}`);
+      assert.equal(
+        JSON.stringify(out).length,
+        out.length + 2,
+        `${raw} -> ${out}`,
+      );
+    }
+  }
+});
+
+test("falls back to /account for a sandboxed page's null origin", () => {
+  assert.equal(safeRedirect("/account?x=1", "null"), "/account");
+});
+
 test("falls back to /account for no redirect", () => {
   assert.equal(safeRedirect(null, ORIGIN), "/account");
   assert.equal(safeRedirect("", ORIGIN), "/account");
