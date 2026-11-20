@@ -18,6 +18,12 @@ import {
 } from "./sphere-math";
 import { esc, fmtInt, cardFrameOpen, cardFrameClose } from "./svg-helpers";
 import { brandIconAt, GITHUB_PATH, GITHUB_VB } from "./brand-icons";
+import {
+  COVER_DEFAULT_SIZE,
+  coverLayout,
+  coverSvgOpen,
+  sphereGroup,
+} from "./cover";
 
 const DEFAULT_W = 1100;
 const DEFAULT_H = 340;
@@ -33,6 +39,9 @@ const Input = z.object({
     .min(1)
     .max(39)
     .regex(/^[a-zA-Z0-9](?:[a-zA-Z0-9]|-(?=[a-zA-Z0-9])){0,38}$/),
+  // "cover": a 4:1 profile-header banner laid out around the page's
+  // profile photo and slide selector (see ./cover.ts). Default: the card.
+  layout: z.enum(["card", "cover"]).optional(),
 });
 type Input = z.infer<typeof Input>;
 
@@ -40,6 +49,7 @@ type Data = {
   overview: UserOverview;
   contrib: UserContributions;
   lifetime: UserLifetime;
+  layout: "card" | "cover";
 };
 
 const N_POINTS = 50;
@@ -164,12 +174,9 @@ function buildCountUp(total: number, steps: number): string {
   return vals.join(";");
 }
 
-const renderSvg: CardRenderer<Data> = async ({
-  data,
-  theme,
-  width,
-  height,
-}) => {
+const renderSvg: CardRenderer<Data> = async (args) => {
+  if (args.data.layout === "cover") return renderCover(args);
+  const { data, theme, width, height } = args;
   const sphereCx = SPHERE_R + 40;
   const sphereCy = height / 2;
   const sphereDots = buildSphereDots(sphereCx, sphereCy, "22s");
@@ -268,10 +275,81 @@ const renderSvg: CardRenderer<Data> = async ({
   };
 };
 
+// Cover (4:1): name above the profile photo, sphere and the headline to
+// its right, everything clear of the page's slide selector (see
+// ./cover.ts for the measured profile chrome).
+const renderCover: CardRenderer<Data> = async ({
+  data,
+  theme,
+  width,
+  height,
+}) => {
+  const L = coverLayout();
+  const sphere = sphereGroup(
+    L,
+    brandIconAt({
+      cx: 0,
+      cy: 0,
+      size: 96,
+      pathD: GITHUB_PATH,
+      pathViewBox: GITHUB_VB,
+      fill: "#22d3ee",
+      peakOpacity: 0.7,
+      dimOpacity: 0.12,
+      dur: "5.4s",
+    }) +
+      buildIcosa(0, 0, SPHERE_R * 0.55, "14s") +
+      buildSphereDots(0, 0, "22s"),
+  );
+
+  const headText = fmtInt(data.contrib.totalCommitsLastYear);
+  const display = data.overview.name ?? data.overview.login;
+  const sub = `@${data.overview.login} · ${fmtInt(data.lifetime.lifetimeCommits)} since ${data.lifetime.yearsRange.start}`;
+  const { vw, vh, top } = L;
+
+  return {
+    contentType: "image/svg+xml; charset=utf-8",
+    body: `${coverSvgOpen(L, width, height, esc(`commits + orbit cover for @${data.overview.login}`))}
+  <defs>
+    <radialGradient id="kBg" gradientUnits="userSpaceOnUse" cx="${L.glow.cx}" cy="${L.glow.cy}" r="${L.glow.r}">
+      <stop offset="0%" stop-color="${theme.gradient}" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="${theme.bg}" stop-opacity="1"/>
+    </radialGradient>
+    <radialGradient id="kRim" cx="50%" cy="50%" r="50%">
+      <stop offset="55%" stop-color="#a855f7" stop-opacity="0"/>
+      <stop offset="80%" stop-color="#a855f7" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#a855f7" stop-opacity="0"/>
+    </radialGradient>
+    <style>
+      .kName { font: 700 ${top.nameSize}px ui-sans-serif, system-ui, sans-serif; fill: ${theme.text}; }
+      .kSub  { font: 500 ${top.subSize}px ui-monospace, SFMono-Regular, Menlo, monospace; fill: ${theme.textMuted}; letter-spacing: 0.04em; }
+      .kHead { font: 800 ${L.head.size}px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #22d3ee; }
+      .kLbl  { font: 600 ${L.label.size}px ui-sans-serif, system-ui, sans-serif; fill: ${theme.textMuted}; letter-spacing: 0.22em; }
+      .kName, .kSub, .kHead, .kLbl { opacity: 0; animation: kFade 600ms ease-out forwards; }
+      .kName { animation-delay: 80ms; }
+      .kSub  { animation-delay: 180ms; }
+      .kHead { animation-delay: 300ms; }
+      .kLbl  { animation-delay: 400ms; }
+      @keyframes kFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+  </defs>
+  <rect width="${vw}" height="${vh}" fill="${theme.bg}"/>
+  <rect width="${vw}" height="${vh}" fill="url(#kBg)"/>
+  <circle cx="${L.sphere.cx}" cy="${L.sphere.cy}" r="${((SPHERE_R + 26) * L.sphere.scale).toFixed(1)}" fill="url(#kRim)"/>
+  ${sphere}
+  <text class="kName" x="${top.x}" y="${top.nameY}">${esc(display)}</text>
+  <text class="kSub" x="${top.x}" y="${top.subY}">${esc(sub)}</text>
+  <text class="kHead" x="${L.x0}" y="${L.head.y}">${headText}</text>
+  <text class="kLbl" x="${L.x0}" y="${L.label.y}">COMMITS · LAST YEAR</text>
+</svg>`,
+  };
+};
+
 export const commitsOrbitCard: Card<Input, Data> = {
   name: "commits-orbit",
   runtime: "edge",
   defaultSize: { width: DEFAULT_W, height: DEFAULT_H },
+  sizeFor: (input) => (input.layout === "cover" ? COVER_DEFAULT_SIZE : null),
   input: Input,
   resolve: async (input, cache) => {
     const [overview, contrib, lifetime] = await Promise.all([
@@ -279,7 +357,7 @@ export const commitsOrbitCard: Card<Input, Data> = {
       userContributions({ login: input.user }, cache),
       userLifetime({ login: input.user }, cache),
     ]);
-    return { overview, contrib, lifetime };
+    return { overview, contrib, lifetime, layout: input.layout ?? "card" };
   },
   formats: {
     svg: renderSvg,

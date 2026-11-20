@@ -11,6 +11,13 @@ import {
 } from "./sphere-math";
 import { esc, fmtInt, cardFrameOpen, cardFrameClose } from "./svg-helpers";
 import { brandIconAt, NITROTYPE_PATH, NITROTYPE_VB } from "./brand-icons";
+import {
+  COVER_DEFAULT_SIZE,
+  coverLayout,
+  coverSvgOpen,
+  monoWidth,
+  sphereGroup,
+} from "./cover";
 
 const DEFAULT_W = 1100;
 const DEFAULT_H = 340;
@@ -26,10 +33,13 @@ const Input = z.object({
     .min(1)
     .max(32)
     .regex(/^[A-Za-z0-9_]+$/),
+  // "cover": a 4:1 profile-header banner laid out around the page's
+  // profile photo and slide selector (see ./cover.ts). Default: the card.
+  layout: z.enum(["card", "cover"]).optional(),
 });
 type Input = z.infer<typeof Input>;
 
-type Data = { racer: NitrotypeRacer };
+type Data = { racer: NitrotypeRacer; layout: "card" | "cover" };
 
 const N_POINTS = 50;
 const N_KF = 30;
@@ -170,12 +180,24 @@ function tierLabel(t: number): string {
   }
 }
 
-const renderSvg: CardRenderer<Data> = async ({
-  data,
-  theme,
-  width,
-  height,
-}) => {
+function tierColorFor(tier: number): string {
+  // Prism palette tier stripe — diamond falls back to amber to match.
+  return tier >= 5
+    ? "#fde047"
+    : tier === 4
+      ? "#e5e7eb"
+      : tier === 3
+        ? "#fbbf24"
+        : tier === 2
+          ? "#94a3b8"
+          : tier === 1
+            ? "#a16207"
+            : "#fbbf24";
+}
+
+const renderSvg: CardRenderer<Data> = async (args) => {
+  if (args.data.layout === "cover") return renderCover(args);
+  const { data, theme, width, height } = args;
   const r = data.racer;
   // Sphere on the right.
   const sphereCx = width - SPHERE_R - 40;
@@ -203,19 +225,7 @@ const renderSvg: CardRenderer<Data> = async ({
   const racesCount = buildCountUp(r.racesPlayed, 18);
   const display = r.displayName ?? r.username;
 
-  // Prism palette tier stripe — diamond falls back to amber to match.
-  const tierColor =
-    r.leagueTier >= 5
-      ? "#fde047"
-      : r.leagueTier === 4
-        ? "#e5e7eb"
-        : r.leagueTier === 3
-          ? "#fbbf24"
-          : r.leagueTier === 2
-            ? "#94a3b8"
-            : r.leagueTier === 1
-              ? "#a16207"
-              : "#fbbf24";
+  const tierColor = tierColorFor(r.leagueTier);
 
   return {
     contentType: "image/svg+xml; charset=utf-8",
@@ -294,13 +304,100 @@ const renderSvg: CardRenderer<Data> = async ({
   };
 };
 
+// Cover (4:1): same frame as commits-orbit's cover (see ./cover.ts) —
+// name above the profile photo, sphere, then the average with the peak
+// beside it, all clear of the page's slide selector.
+const renderCover: CardRenderer<Data> = async ({
+  data,
+  theme,
+  width,
+  height,
+}) => {
+  const L = coverLayout();
+  const r = data.racer;
+  const sphere = sphereGroup(
+    L,
+    brandIconAt({
+      cx: 0,
+      cy: 0,
+      size: 108,
+      pathD: NITROTYPE_PATH,
+      pathViewBox: NITROTYPE_VB,
+      fill: "#fbbf24",
+      peakOpacity: 0.7,
+      dimOpacity: 0.12,
+      dur: "6.2s",
+    }) +
+      buildIcosa(0, 0, SPHERE_R * 0.55, "14s") +
+      buildSphereDots(0, 0, "22s"),
+  );
+
+  const display = r.displayName ?? r.username;
+  const headText = String(r.avgSpeed);
+  const unitSize = Math.round(L.head.size * 0.34);
+  const unitX = L.x0 + monoWidth(headText, L.head.size) + 10;
+  // Peak sits right of "WPM", in the open band between the edit pencil
+  // (ends y 90) and the slide selector (starts y 202).
+  const peakX = unitX + monoWidth("WPM", unitSize) + 44;
+  const sub = `@${r.username} · ${fmtInt(r.racesPlayed)} races`;
+  const { vw, vh, top } = L;
+
+  return {
+    contentType: "image/svg+xml; charset=utf-8",
+    body: `${coverSvgOpen(L, width, height, esc(`typing + orbit cover for ${display}`))}
+  <defs>
+    <radialGradient id="nBg" gradientUnits="userSpaceOnUse" cx="${L.glow.cx}" cy="${L.glow.cy}" r="${L.glow.r}">
+      <stop offset="0%" stop-color="${theme.gradient}" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="${theme.bg}" stop-opacity="1"/>
+    </radialGradient>
+    <radialGradient id="nRim" cx="50%" cy="50%" r="50%">
+      <stop offset="55%" stop-color="#fb923c" stop-opacity="0"/>
+      <stop offset="80%" stop-color="#fb923c" stop-opacity="0.34"/>
+      <stop offset="100%" stop-color="#fb923c" stop-opacity="0"/>
+    </radialGradient>
+    <style>
+      .nName { font: 700 ${top.nameSize}px ui-sans-serif, system-ui, sans-serif; fill: ${theme.text}; }
+      .nTier { font: 700 ${top.subSize}px ui-sans-serif, system-ui, sans-serif; fill: ${tierColorFor(r.leagueTier)}; letter-spacing: 0.22em; }
+      .nSub  { font: 500 ${top.subSize}px ui-monospace, SFMono-Regular, Menlo, monospace; fill: ${theme.textMuted}; letter-spacing: 0.04em; }
+      .nHead { font: 800 ${L.head.size}px ui-monospace, SFMono-Regular, Menlo, monospace; fill: #fbbf24; }
+      .nUnit { font: 700 ${unitSize}px ui-monospace, SFMono-Regular, Menlo, monospace; fill: ${theme.textMuted}; }
+      .nLbl  { font: 600 ${L.label.size}px ui-sans-serif, system-ui, sans-serif; fill: ${theme.textMuted}; letter-spacing: 0.22em; }
+      .nPeak { font: 700 26px ui-monospace, SFMono-Regular, Menlo, monospace; fill: ${theme.text}; }
+      .nPeakUnit { font: 700 14px ui-monospace, SFMono-Regular, Menlo, monospace; fill: ${theme.textMuted}; }
+      .nName, .nSub, .nHead, .nUnit, .nLbl, .nPeak { opacity: 0; animation: nFade 600ms ease-out forwards; }
+      .nName { animation-delay: 80ms; }
+      .nSub  { animation-delay: 180ms; }
+      .nHead { animation-delay: 300ms; }
+      .nUnit { animation-delay: 360ms; }
+      .nLbl  { animation-delay: 400ms; }
+      .nPeak { animation-delay: 460ms; }
+      @keyframes nFade { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+  </defs>
+  <rect width="${vw}" height="${vh}" fill="${theme.bg}"/>
+  <rect width="${vw}" height="${vh}" fill="url(#nBg)"/>
+  <circle cx="${L.sphere.cx}" cy="${L.sphere.cy}" r="${((SPHERE_R + 26) * L.sphere.scale).toFixed(1)}" fill="url(#nRim)"/>
+  ${sphere}
+  <text class="nName" x="${top.x}" y="${top.nameY}">${esc(display)}<tspan class="nTier" dx="14">${esc(tierLabel(r.leagueTier))}</tspan></text>
+  <text class="nSub" x="${top.x}" y="${top.subY}">${esc(sub)}</text>
+  <text class="nHead" x="${L.x0}" y="${L.head.y}">${headText}</text>
+  <text class="nUnit" x="${unitX}" y="${L.head.y}">WPM</text>
+  <text class="nLbl" x="${peakX}" y="${L.head.y - 48}">PEAK</text>
+  <text class="nPeak" x="${peakX}" y="${L.head.y - 16}">${r.highestSpeed} <tspan class="nPeakUnit">WPM</tspan></text>
+  <text class="nLbl" x="${L.x0}" y="${L.label.y}">AVERAGE · LAST 10 RACES</text>
+</svg>`,
+  };
+};
+
 export const typingOrbitCard: Card<Input, Data> = {
   name: "typing-orbit",
   runtime: "edge",
   defaultSize: { width: DEFAULT_W, height: DEFAULT_H },
+  sizeFor: (input) => (input.layout === "cover" ? COVER_DEFAULT_SIZE : null),
   input: Input,
   resolve: async (input, cache) => ({
     racer: await nitrotypeRacer({ username: input.user }, cache),
+    layout: input.layout ?? "card",
   }),
   formats: {
     svg: renderSvg,
