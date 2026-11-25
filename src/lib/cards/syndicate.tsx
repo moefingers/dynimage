@@ -2,10 +2,12 @@ import { z } from "zod";
 import type { Card, CardRenderer } from "./types";
 import { esc, cardFrameOpen, cardFrameClose } from "./svg-helpers";
 import {
-  SYNDICATE_LATTICE_PATH_A,
-  SYNDICATE_LATTICE_PATH_B,
   SYNDICATE_LATTICE_VB,
+  SYNDICATE_SET_TURNS,
+  SYNDICATE_STAR,
   SYNDICATE_TEAL,
+  syndicateSet,
+  syndicateStarPath,
 } from "./syndicate-lattice";
 
 const DEFAULT_W = 900;
@@ -13,9 +15,10 @@ const DEFAULT_H = 320;
 
 // Recanon CTA. Centered around the brand sacred-geometry
 // lattice from infinite-syndicate.com/public/radial1.svg (now Recanon) — two
-// counter-rotating layers of intersecting circles, with the brand teal
-// stroke and a slow hue-rotate for depth. Tiles overlay the lattice;
-// the title sits centered between the lattice center and the top edge.
+// counter-rotating sets of twelve-point stars, every star also spinning
+// on its own centre against its set, with the brand teal stroke and a
+// slow hue-rotate for depth. Tiles overlay the lattice; the title sits
+// centered between the lattice center and the top edge.
 
 // The two lattice discs share one loop. Each turns a whole number of
 // times per loop at its own average speed, and its speed drifts with a
@@ -91,6 +94,16 @@ const SPIN_B = spinAnimation(-2, [
   { k: 3, amp: 0.15, phase: 0.4 },
 ]);
 
+// Every star also spins on its own centre, against its set's turn and
+// faster: two turns per loop (8°/s), A's stars one way and B's the
+// other. A star repeats every 30°, so any whole number of turns per
+// loop keeps the loop seamless. additive="sum" puts the spin after the
+// star's own placement, so it turns about the star's centre.
+const starSpin = (turns: number) =>
+  `<animateTransform attributeName="transform" type="rotate" values="0;${turns * 360}" dur="${SPIN_LOOP_SEC}s" repeatCount="indefinite" additive="sum"/>`;
+const STAR_SPIN_A = starSpin(-2);
+const STAR_SPIN_B = starSpin(2);
+
 const Input = z.object({
   user: z
     .string()
@@ -148,9 +161,32 @@ const renderSvg: CardRenderer<Data> = async ({
   const scale = latticeSize / SYNDICATE_LATTICE_VB;
   // Outer static wrap: shift origin to (latticeCx, latticeCy), then
   // apply uniform scale. After this, the inner coord system has (0,0)
-  // at the banner center; the path needs translate(-150,-150) to sit
-  // around that center.
+  // at the banner center, where the stars are placed around.
   const latticeOuterTx = `translate(${latticeCx} ${latticeCy}) scale(${scale.toFixed(4)})`;
+  // The lattice reaches a ring star's far points: twice a star's
+  // radius. The star masks and gradient discs cover that, plus the
+  // stroke.
+  const reach = SYNDICATE_STAR.radius * 2;
+  const box = Math.ceil(reach) + 2;
+  const f2 = (n: number) => +n.toFixed(2);
+  const latticeSet = (
+    key: string,
+    turn: number,
+    gradient: string,
+    ringSpin: string,
+    starSpin: string,
+  ) => {
+    const stars = syndicateSet(turn)
+      .map(
+        (s) =>
+          `<use href="#sStar" transform="translate(${f2(s.x)} ${f2(s.y)}) rotate(${s.turn})">${starSpin}</use>`,
+      )
+      .join("");
+    return `<mask id="sStars${key}" maskUnits="userSpaceOnUse" x="${-box}" y="${-box}" width="${2 * box}" height="${2 * box}">
+        <g>${ringSpin}${stars}</g>
+      </mask>
+      <rect x="${-box}" y="${-box}" width="${2 * box}" height="${2 * box}" fill="url(#${gradient})" mask="url(#sStars${key})"/>`;
+  };
 
   // Per-tile clipPath so each tile's shimmer can sweep an inner rect
   // across the tile without bleeding outside its rounded corners.
@@ -189,12 +225,14 @@ const renderSvg: CardRenderer<Data> = async ({
     contentType: "image/svg+xml; charset=utf-8",
     body: `<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}" role="img" aria-label="${esc(`Recanon — services CTA for ${data.user}`)}">
   <defs>
-    <radialGradient id="sLatticeGrad" cx="50%" cy="50%" r="50%">
+    <!-- Lattice gradients, centred on the lattice and reaching its
+         outer edge (the far points of the ring stars). -->
+    <radialGradient id="sLatticeGrad" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="${reach}">
       <stop offset="16%" stop-color="${SYNDICATE_TEAL}" stop-opacity="0"/>
       <stop offset="35%" stop-color="${SYNDICATE_TEAL}" stop-opacity="0.55"/>
       <stop offset="100%" stop-color="#808080" stop-opacity="0.95"/>
     </radialGradient>
-    <radialGradient id="sLatticeGradB" cx="50%" cy="50%" r="50%">
+    <radialGradient id="sLatticeGradB" gradientUnits="userSpaceOnUse" cx="0" cy="0" r="${reach}">
       <stop offset="2%" stop-color="#6f6f6f" stop-opacity="0"/>
       <stop offset="35%" stop-color="#6f6f6f" stop-opacity="0.45"/>
       <stop offset="100%" stop-color="#808080" stop-opacity="0.85"/>
@@ -223,6 +261,9 @@ const renderSvg: CardRenderer<Data> = async ({
     <mask id="sLatticeMask" maskUnits="userSpaceOnUse" x="0" y="0" width="${width}" height="${height}">
       <rect x="0" y="0" width="${width}" height="${height}" fill="url(#sLatticeMaskGrad)"/>
     </mask>
+    <!-- One star of the lattice, centred on the origin, drawn white for
+         the star masks below. -->
+    <path id="sStar" d="${syndicateStarPath()}" fill="none" stroke="#fff" stroke-width="1.4" stroke-linejoin="round"/>
     <style>
       .brand { font: 800 56px ui-sans-serif, system-ui, -apple-system, sans-serif; fill: ${theme.text}; letter-spacing: -0.01em; }
       .tag   { font: 500 14px ui-sans-serif, system-ui, sans-serif; fill: ${theme.textMuted}; letter-spacing: 0.18em; text-transform: uppercase; }
@@ -239,32 +280,22 @@ const renderSvg: CardRenderer<Data> = async ({
 
   ${cardFrameOpen("s", width, height, 20, theme.bg)}
 
-  <!-- Brand lattice. Two discs — A spins one way, B (already offset
-       ~15° in the source) spins the other, each at its own drifting
-       speed (see spinAnimation). They hold their size; only rotation
-       moves.
+  <!-- Brand lattice: two sets of stars, each a centre star and a ring
+       of 12. Set A's ring turns one way and set B's (15° off A) the
+       other, each at its own drifting speed (see spinAnimation), while
+       every star spins on its own centre against its set's turn.
 
-       Critical nesting: the SMIL animateTransform goes on the OUTER
-       <g>, and the path is wrapped by an INNER <g transform="translate
-       (-150 -150)"> that shifts its native (150,150) center to the
-       outer g's (0,0) BEFORE any animation applies. If the translate
-       were on the outer g instead, the animated rotate would replace
-       it, and the lattice would spin around its own corner instead of
-       staying centered on the banner. -->
+       Each set's stars are drawn white into a mask that lets a disc of
+       the set's gradient through. Stroking the stars with the gradient
+       directly would turn the gradient with each spinning star; through
+       the mask it stays put, centred on the lattice, as on the site.
+       The ring's turn sits on the group holding the stars (rotating
+       about the lattice centre, the origin here); each star's spin sits
+       on its own use, after its placement. -->
   <g class="lattice-hue" mask="url(#sLatticeMask)" opacity="0.85">
     <g transform="${latticeOuterTx}">
-      <g>
-        <g transform="translate(-150 -150)">
-          <path d="${SYNDICATE_LATTICE_PATH_A}" fill="none" stroke="url(#sLatticeGrad)" stroke-width="1.4" stroke-linejoin="round"/>
-        </g>
-        ${SPIN_A}
-      </g>
-      <g>
-        <g transform="translate(-150 -150)">
-          <path d="${SYNDICATE_LATTICE_PATH_B}" fill="none" stroke="url(#sLatticeGradB)" stroke-width="1.4" stroke-linejoin="round"/>
-        </g>
-        ${SPIN_B}
-      </g>
+      ${latticeSet("A", SYNDICATE_SET_TURNS.a, "sLatticeGrad", SPIN_A, STAR_SPIN_A)}
+      ${latticeSet("B", SYNDICATE_SET_TURNS.b, "sLatticeGradB", SPIN_B, STAR_SPIN_B)}
     </g>
   </g>
 
@@ -291,7 +322,7 @@ export const syndicateCard: Card<Input, Data> = {
   meta: {
     title: "Recanon — services CTA",
     description:
-      "Branded CTA built around the brand sacred-geometry lattice from recanon.com. Two counter-rotating layers of the intersecting-circles pattern, each turning at its own drifting speed on a seamless loop, with a slow hue-rotate, brand teal stroke, masked to keep the title legible. Three service tiles overlay. Optional focus= dims non-target tiles.",
+      "Branded CTA built around the brand sacred-geometry lattice from recanon.com. Two counter-rotating sets of twelve-point stars, each set turning at its own drifting speed on a seamless loop while every star spins on its own centre against it, with a slow hue-rotate, brand teal stroke, masked to keep the title legible. Three service tiles overlay. Optional focus= dims non-target tiles.",
     dimensions: ["user"],
     supportsAnimation: true,
   },
